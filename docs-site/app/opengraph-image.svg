@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="ogBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <linearGradient id="ogMark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#F97316"/>
+    </linearGradient>
+    <radialGradient id="ogGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#3B82F6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#ogBg)"/>
+  <ellipse cx="600" cy="315" rx="500" ry="300" fill="url(#ogGlow)"/>
+  <!-- Grid pattern -->
+  <g stroke="#334155" stroke-width="1" opacity="0.3">
+    <path d="M 0 158 L 1200 158" fill="none"/>
+    <path d="M 0 315 L 1200 315" fill="none"/>
+    <path d="M 0 472 L 1200 472" fill="none"/>
+    <path d="M 300 0 L 300 630" fill="none"/>
+    <path d="M 600 0 L 600 630" fill="none"/>
+    <path d="M 900 0 L 900 630" fill="none"/>
+  </g>
+
+  <!-- Logo mark — gradient square with stylized M -->
+  <g transform="translate(80, 215)">
+    <rect width="200" height="200" rx="42" fill="url(#ogMark)"/>
+    <path
+      d="M 40 154 L 40 50 L 70 50 L 100 100 L 130 50 L 160 50 L 160 154 L 142 154 L 142 92 L 108 145 L 92 145 L 58 92 L 58 154 Z"
+      fill="#FFFFFF"
+    />
+    <circle cx="166" cy="38" r="10" fill="#FFFFFF" opacity="0.9"/>
+  </g>
+
+  <!-- Wordmark + tagline -->
+  <g transform="translate(320, 235)" fill="#F8FAFC">
+    <text font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif"
+          font-size="92" font-weight="800" letter-spacing="-0.04em">
+      MicroRTOS
+    </text>
+    <text y="60"
+          font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif"
+          font-size="34" font-weight="500" fill="#94A3B8">
+      A real-time kernel you can read in an afternoon
+    </text>
+    <text y="120"
+          font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="22" font-weight="400" fill="#64748B">
+      AVR · ARM Cortex-M · MISRA-aligned · MIT
+    </text>
+  </g>
+
+  <!-- Bottom byline -->
+  <text x="80" y="580"
+        font-family="ui-sans-serif, system-ui, sans-serif" font-size="22"
+        font-weight="500" fill="#64748B">
+    sitharaj.in
+  </text>
+  <text x="1120" y="580" text-anchor="end"
+        font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        font-size="22" font-weight="500" fill="#64748B">
+    by Sitharaj Seenivasan
+  </text>
+</svg>

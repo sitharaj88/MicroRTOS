@@ -2,6 +2,21 @@
   "name": "micrortos-docs",
   "version": "0.1.0",
   "private": true,
+  "description": "Documentation site for MicroRTOS — a small, MISRA-aligned real-time kernel for AVR and ARM Cortex-M.",
+  "author": {
+    "name": "Sitharaj Seenivasan",
+    "url": "https://sitharaj.in"
+  },
+  "license": "MIT",
+  "homepage": "https://sitharaj88.github.io/MicroRTOS",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sitharaj88/MicroRTOS.git",
+    "directory": "docs-site"
+  },
+  "bugs": {
+    "url": "https://github.com/sitharaj88/MicroRTOS/issues"
+  },
   "scripts": {
     "dev": "next dev --turbo",
     "build": "next build",

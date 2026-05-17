@@ -17,7 +17,7 @@ browser refresh.
 ## Build locally
 
 ```bash
-NEXT_PUBLIC_BASE_PATH=/rtos pnpm build
+NEXT_PUBLIC_BASE_PATH=/MicroRTOS pnpm build
 ```
 
 Produces `out/` — a self-contained static site. Open `out/index.html`
@@ -37,7 +37,7 @@ the base path must match the repo name.
 Push to `master`. The `.github/workflows/docs.yml` workflow:
 
 1. Installs deps with pnpm.
-2. Builds with `NEXT_PUBLIC_BASE_PATH=/rtos`.
+2. Builds with `NEXT_PUBLIC_BASE_PATH=/MicroRTOS`.
 3. Adds `.nojekyll` so GitHub Pages doesn't drop `_next/` paths.
 4. Uploads `out/` as a Pages artifact and deploys.
 

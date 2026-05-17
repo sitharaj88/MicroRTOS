@@ -6,10 +6,10 @@ type Line =
   | { kind: 'output'; text: string; tone?: 'normal' | 'success' | 'dim' };
 
 const lines: Line[] = [
-  { kind: 'prompt', cmd: 'git clone https://github.com/sitharaj88/rtos' },
-  { kind: 'output', text: "Cloning into 'rtos'…", tone: 'dim' },
+  { kind: 'prompt', cmd: 'git clone https://github.com/sitharaj88/MicroRTOS' },
+  { kind: 'output', text: "Cloning into 'MicroRTOS'…", tone: 'dim' },
   { kind: 'output', text: 'Receiving objects: 100% (412/412), done.', tone: 'dim' },
-  { kind: 'prompt', cmd: 'cd rtos && make flash EXAMPLE=10' },
+  { kind: 'prompt', cmd: 'cd MicroRTOS && make flash EXAMPLE=10' },
   { kind: 'output', text: 'Compiling: src/core/mr_list.c', tone: 'dim' },
   { kind: 'output', text: 'Compiling: src/core/mr_task.c', tone: 'dim' },
   { kind: 'output', text: 'Creating library: build/libmicrortos.a', tone: 'dim' },
@@ -42,7 +42,7 @@ export function TerminalDemo({ className }: { className?: string }) {
           </div>
           <span className="flex items-center gap-1.5 font-mono text-xs text-fd-muted-foreground">
             <Terminal className="size-3.5" />
-            ~/rtos · zsh
+            ~/MicroRTOS · zsh
           </span>
         </div>
       </div>

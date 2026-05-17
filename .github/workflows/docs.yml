@@ -1,11 +1,9 @@
 name: Docs site
 
+# Manual trigger only — run this workflow from the Actions tab when you
+# want to publish a new version of the docs to GitHub Pages. Avoids
+# noisy deploys on every push and keeps publishing intentional.
 on:
-  push:
-    branches: [master]
-    paths:
-      - 'docs-site/**'
-      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
@@ -13,7 +11,7 @@ permissions:
   pages: write
   id-token: write
 
-# Allow only one concurrent deploy, queuing trailing pushes.
+# Allow only one concurrent deploy.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -41,9 +39,10 @@ jobs:
 
       - name: Build static site
         env:
-          # Project page lives at https://<user>.github.io/rtos/.
-          # Update if you rename the repo.
-          NEXT_PUBLIC_BASE_PATH: /rtos
+          # GitHub Pages project URL: https://sitharaj88.github.io/MicroRTOS/
+          # The basePath must match the repo name exactly.
+          NEXT_PUBLIC_BASE_PATH: /MicroRTOS
+          NEXT_PUBLIC_SITE_URL: https://sitharaj88.github.io/MicroRTOS
         run: pnpm build
 
       # GitHub Pages requires .nojekyll so it doesn't strip _next/ paths.

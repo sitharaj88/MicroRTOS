@@ -37,6 +37,8 @@ import { TrustRow } from '@/components/marketing/trust-row';
 import { FloatingChip } from '@/components/marketing/floating-chip';
 import { ScrollHint } from '@/components/marketing/scroll-hint';
 import { LiveTicker } from '@/components/marketing/live-ticker';
+import { AuthorByline, author } from '@/components/marketing/author-byline';
+import { LogoMark } from '@/components/ui/logo';
 
 const faq = [
   {
@@ -80,6 +82,14 @@ export default function HomePage() {
 
         <Container className="relative pb-16 pt-12 sm:pb-24 sm:pt-24 lg:pb-28 lg:pt-28">
           <div className="flex flex-col items-center text-center">
+            {/* Big brand mark + project name */}
+            <div className="mb-6 flex items-center gap-3">
+              <LogoMark size={44} className="drop-shadow-[0_4px_24px_rgba(59,130,246,0.4)]" />
+              <span className="text-2xl font-bold tracking-tight text-fd-foreground">
+                MicroRTOS
+              </span>
+            </div>
+
             {/* Compact live status with pulsing dot.
                 Shorten the message on phones to keep the pill on one line. */}
             <LiveTicker
@@ -126,7 +136,7 @@ export default function HomePage() {
                 Browse tutorials
               </ButtonLink>
               <ButtonLink
-                href="https://github.com/sitharaj88/rtos"
+                href="https://github.com/sitharaj88/MicroRTOS"
                 size="lg"
                 variant="ghost"
                 iconLeft={<Github className="size-4" />}
@@ -137,6 +147,9 @@ export default function HomePage() {
 
             {/* Trust signals row */}
             <TrustRow className="mt-9" />
+
+            {/* Author byline */}
+            <AuthorByline className="mt-6" />
           </div>
 
           {/* Hero visual — code + board side by side, integrated with chips */}
@@ -638,56 +651,123 @@ export default function HomePage() {
 
       {/* =========================== FOOTER ============================ */}
       <footer className="border-t border-fd-border bg-fd-card/40">
-        <Container className="flex flex-col gap-10 py-14 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-sm">
-            <div className="flex items-center gap-2">
-              <span
-                aria-hidden
-                className="inline-block size-6 rounded-md bg-gradient-to-br from-fd-primary to-fd-accent shadow-lg shadow-fd-primary/30"
-              />
-              <span className="text-lg font-semibold tracking-tight">MicroRTOS</span>
-            </div>
-            <p className="mt-3 text-sm text-fd-muted-foreground">
-              A small, MISRA-aligned real-time kernel for AVR and ARM
-              Cortex-M. Built to be read, audited, and shipped.
-            </p>
-            <p className="mt-6 text-xs text-fd-muted-foreground">
-              MIT License · © {new Date().getFullYear()}
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-8 text-sm">
-            <div>
-              <div className="mb-3 text-xs font-bold uppercase tracking-widest text-fd-muted-foreground">
-                Docs
+        <Container className="py-16">
+          <div className="grid gap-12 lg:grid-cols-12 lg:gap-10">
+            {/* Brand + about + author cluster */}
+            <div className="lg:col-span-5">
+              <div className="flex items-center gap-2.5">
+                <LogoMark size={32} />
+                <span className="text-xl font-bold tracking-tight">MicroRTOS</span>
               </div>
-              <ul className="space-y-2">
-                <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/getting-started">Get started</Link></li>
-                <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/tutorials">Tutorials</Link></li>
-                <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/concepts">Concepts</Link></li>
-                <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/api">API reference</Link></li>
-                <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/performance">Performance</Link></li>
-              </ul>
-            </div>
-            <div>
-              <div className="mb-3 text-xs font-bold uppercase tracking-widest text-fd-muted-foreground">
-                Resources
+              <p className="mt-4 max-w-sm text-sm text-fd-muted-foreground">
+                A small, MISRA-aligned real-time kernel for AVR and ARM
+                Cortex-M. Built to be read, audited, and shipped.
+              </p>
+
+              {/* Author block */}
+              <div className="mt-7 rounded-2xl border border-fd-border bg-fd-card p-5">
+                <div className="flex items-center gap-3">
+                  <div
+                    aria-hidden
+                    className="inline-flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-fd-primary to-fd-accent text-sm font-bold text-white shadow-lg shadow-fd-primary/20"
+                  >
+                    SS
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-fd-foreground">
+                      {author.name}
+                    </div>
+                    <div className="text-xs text-fd-muted-foreground">
+                      Author &amp; maintainer
+                    </div>
+                  </div>
+                </div>
+                <AuthorByline variant="full" className="mt-4" />
               </div>
-              <ul className="space-y-2">
-                <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/examples">Examples</Link></li>
-                <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/porting">Porting</Link></li>
-                <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/faq">FAQ</Link></li>
-                <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/comparison">Comparison</Link></li>
-              </ul>
+
+              <p className="mt-6 text-xs text-fd-muted-foreground">
+                <Link
+                  href="https://github.com/sitharaj88/MicroRTOS/blob/master/LICENSE"
+                  className="font-semibold text-fd-foreground hover:text-fd-primary"
+                >
+                  MIT License
+                </Link>{' '}
+                · © {new Date().getFullYear()} {author.name}
+              </p>
             </div>
-            <div>
-              <div className="mb-3 text-xs font-bold uppercase tracking-widest text-fd-muted-foreground">
-                Project
+
+            {/* Doc + resource + project columns */}
+            <div className="grid grid-cols-2 gap-8 text-sm sm:grid-cols-3 lg:col-span-7">
+              <div>
+                <div className="mb-3 text-xs font-bold uppercase tracking-widest text-fd-muted-foreground">
+                  Docs
+                </div>
+                <ul className="space-y-2">
+                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/getting-started">Get started</Link></li>
+                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/tutorials">Tutorials</Link></li>
+                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/concepts">Concepts</Link></li>
+                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/api">API reference</Link></li>
+                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/performance">Performance</Link></li>
+                </ul>
               </div>
-              <ul className="space-y-2">
-                <li><Link className="text-fd-foreground hover:text-fd-primary" href="https://github.com/sitharaj88/rtos">GitHub</Link></li>
-                <li><Link className="text-fd-foreground hover:text-fd-primary" href="https://github.com/sitharaj88/rtos/issues">Issues</Link></li>
-                <li><Link className="text-fd-foreground hover:text-fd-primary" href="https://github.com/sitharaj88/rtos/blob/master/docs/MISRA_COMPLIANCE.md">MISRA report</Link></li>
-              </ul>
+              <div>
+                <div className="mb-3 text-xs font-bold uppercase tracking-widest text-fd-muted-foreground">
+                  Resources
+                </div>
+                <ul className="space-y-2">
+                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/examples">Examples</Link></li>
+                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/porting">Porting</Link></li>
+                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/faq">FAQ</Link></li>
+                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/comparison">Comparison</Link></li>
+                </ul>
+              </div>
+              <div>
+                <div className="mb-3 text-xs font-bold uppercase tracking-widest text-fd-muted-foreground">
+                  Project
+                </div>
+                <ul className="space-y-2">
+                  <li>
+                    <Link
+                      className="text-fd-foreground hover:text-fd-primary"
+                      href="https://github.com/sitharaj88/MicroRTOS"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      GitHub repo
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      className="text-fd-foreground hover:text-fd-primary"
+                      href="https://github.com/sitharaj88/MicroRTOS/issues"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      Issues
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      className="text-fd-foreground hover:text-fd-primary"
+                      href="https://github.com/sitharaj88/MicroRTOS/blob/master/docs/MISRA_COMPLIANCE.md"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      MISRA report
+                    </Link>
+                  </li>
+                  <li>
+                    <Link
+                      className="text-fd-foreground hover:text-fd-primary"
+                      href="https://github.com/sitharaj88/MicroRTOS/blob/master/LICENSE"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      MIT License
+                    </Link>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
         </Container>
