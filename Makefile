@@ -287,6 +287,25 @@ check-arm:
 		echo "ARM syntax check passed!"; \
 	fi
 
+# Same per-feature matrix as check-features, but for the ARM Cortex-M target.
+# Catches feature regressions that AVR misses (e.g. MPU support is ARM-only).
+check-arm-features:
+	@if ! command -v $(ARM_GCC) >/dev/null 2>&1; then \
+		echo "Skipping ARM feature check: $(ARM_GCC) not in PATH"; \
+	else \
+		echo "Checking ARM syntax with each advanced feature enabled..."; \
+		for flag in RTOS_USE_EDF_SCHEDULER RTOS_USE_MPU RTOS_USE_SMP \
+		             RTOS_USE_WATCHDOG RTOS_USE_TASK_WATCHDOG \
+		             RTOS_USE_TRACING RTOS_USE_ZEROCOPY; do \
+			echo "  -- $$flag=1"; \
+			$(ARM_GCC) $(ARM_CFLAGS) -D$$flag=1 -fsyntax-only \
+				src/core/rtos_deadline.c src/core/rtos_mpu.c src/core/rtos_smp.c \
+				src/diag/rtos_watchdog.c src/diag/rtos_trace.c src/ipc/rtos_zerocopy.c \
+				|| exit 1; \
+		done; \
+		echo "ARM feature syntax check passed!"; \
+	fi
+
 #==============================================================================
 # Unit Tests (host-side, plain gcc)
 #==============================================================================
