@@ -35,7 +35,7 @@ export function SyntaxCode({
     return lines.map((line, i) => (
       <div key={i} className="flex">
         {showLineNumbers ? (
-          <span className="select-none pr-4 text-right text-xs text-fd-muted-foreground/40 sm:pr-6">
+          <span className="select-none pr-3 text-right text-[10px] text-fd-muted-foreground/40 sm:pr-6 sm:text-xs">
             {String(i + 1).padStart(2, ' ')}
           </span>
         ) : null}
@@ -47,7 +47,10 @@ export function SyntaxCode({
   return (
     <div
       className={cn(
-        'group/code relative overflow-hidden rounded-2xl border border-fd-border bg-fd-card/95 shadow-2xl shadow-black/10 backdrop-blur dark:shadow-black/40',
+        // min-w-0 lets the card shrink inside flex/grid columns without
+        // its overflow-x-auto child stretching the parent. Crucial for
+        // mobile widths where the code lines are wider than the screen.
+        'group/code relative min-w-0 overflow-hidden rounded-2xl border border-fd-border bg-fd-card/95 shadow-2xl shadow-black/10 backdrop-blur dark:shadow-black/40',
         className,
       )}
     >
@@ -56,23 +59,23 @@ export function SyntaxCode({
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-fd-primary/50 to-transparent"
       />
-      <div className="flex items-center justify-between gap-3 border-b border-fd-border bg-fd-muted/40 px-4 py-2.5">
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1.5">
-            <span className="size-3 rounded-full bg-red-400/80" aria-hidden />
-            <span className="size-3 rounded-full bg-amber-400/80" aria-hidden />
-            <span className="size-3 rounded-full bg-emerald-400/80" aria-hidden />
+      <div className="flex items-center justify-between gap-3 border-b border-fd-border bg-fd-muted/40 px-3 py-2 sm:px-4 sm:py-2.5">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <div className="flex gap-1 sm:gap-1.5">
+            <span className="size-2.5 rounded-full bg-red-400/80 sm:size-3" aria-hidden />
+            <span className="size-2.5 rounded-full bg-amber-400/80 sm:size-3" aria-hidden />
+            <span className="size-2.5 rounded-full bg-emerald-400/80 sm:size-3" aria-hidden />
           </div>
           {title ? (
-            <span className="flex items-center gap-1.5 font-mono text-xs text-fd-muted-foreground">
-              {variant === 'terminal' ? <Terminal className="size-3.5" /> : null}
-              {title}
+            <span className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[10px] text-fd-muted-foreground sm:text-xs">
+              {variant === 'terminal' ? <Terminal className="size-3 shrink-0 sm:size-3.5" /> : null}
+              <span className="truncate">{title}</span>
             </span>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {badge ? (
-            <span className="rounded-md border border-fd-border bg-fd-card px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fd-muted-foreground">
+            <span className="hidden rounded-md border border-fd-border bg-fd-card px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-fd-muted-foreground sm:inline">
               {badge}
             </span>
           ) : null}
@@ -83,7 +86,7 @@ export function SyntaxCode({
           ) : null}
         </div>
       </div>
-      <pre className="overflow-x-auto px-5 py-5 text-[13px] leading-relaxed">
+      <pre className="overflow-x-auto px-3 py-4 text-[11px] leading-relaxed sm:px-5 sm:py-5 sm:text-[13px]">
         <code className="font-mono text-fd-foreground">{renderBody()}</code>
       </pre>
     </div>

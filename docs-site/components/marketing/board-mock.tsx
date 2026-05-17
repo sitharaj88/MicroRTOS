@@ -10,7 +10,9 @@ export function BoardMock({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'relative aspect-[5/3] overflow-hidden rounded-2xl border border-fd-border bg-gradient-to-br from-emerald-900/20 to-emerald-950/40 p-6 shadow-2xl shadow-emerald-900/30 backdrop-blur',
+        // min-w-0 so the card collapses inside narrow flex/grid columns
+        // instead of stretching its parent.
+        'relative aspect-[5/3] min-w-0 overflow-hidden rounded-2xl border border-fd-border bg-gradient-to-br from-emerald-900/20 to-emerald-950/40 p-4 shadow-2xl shadow-emerald-900/30 backdrop-blur sm:p-6',
         className,
       )}
     >

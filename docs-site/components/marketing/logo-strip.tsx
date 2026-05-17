@@ -19,7 +19,7 @@ export function LogoStrip({ className }: { className?: string }) {
       <span className="text-xs font-bold uppercase tracking-widest text-fd-muted-foreground">
         Runs on
       </span>
-      <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm">
+      <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2.5 text-xs sm:gap-x-6 sm:gap-y-3 sm:text-sm">
         {items.map((it) => (
           <li
             key={it.name}

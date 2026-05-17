@@ -31,7 +31,7 @@ export function TrustRow({ className }: { className?: string }) {
   return (
     <ul
       className={cn(
-        'flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-xs',
+        'flex flex-wrap items-center justify-center gap-x-3 gap-y-2.5 text-xs sm:gap-x-5 sm:gap-y-3',
         className,
       )}
     >

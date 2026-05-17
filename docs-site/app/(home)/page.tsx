@@ -78,27 +78,33 @@ export default function HomePage() {
           className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-32 bg-gradient-to-b from-fd-background to-transparent"
         />
 
-        <Container className="relative pb-20 pt-16 sm:pb-24 sm:pt-24 lg:pb-28 lg:pt-28">
+        <Container className="relative pb-16 pt-12 sm:pb-24 sm:pt-24 lg:pb-28 lg:pt-28">
           <div className="flex flex-col items-center text-center">
-            {/* Compact live status with pulsing dot */}
-            <LiveTicker text="Live on Arduino Uno · LED blinking at 1 Hz right now" />
+            {/* Compact live status with pulsing dot.
+                Shorten the message on phones to keep the pill on one line. */}
+            <LiveTicker
+              text="Live on Arduino Uno · 1 Hz blink"
+              className="hidden sm:inline-flex"
+            />
+            <LiveTicker
+              text="Live on Uno · 1 Hz"
+              className="sm:hidden"
+            />
 
-            <h1 className="mt-7 max-w-5xl text-balance text-5xl font-bold tracking-tightest text-fd-foreground sm:text-6xl lg:text-[5.25rem] lg:leading-[1.05]">
-              The kernel{' '}
-              <span className="text-gradient-flow whitespace-nowrap">
-                small enough to read
+            <h1 className="mt-6 max-w-4xl text-balance text-[2.25rem] font-bold leading-[1.1] tracking-tightest text-fd-foreground sm:mt-7 sm:text-5xl md:text-6xl lg:text-7xl lg:leading-[1.05]">
+              A real-time kernel{' '}
+              <span className="text-gradient-flow">
+                you can read in an afternoon
               </span>
-              ,<br className="hidden sm:block" /> real enough to ship.
             </h1>
 
-            <p className="mt-7 max-w-2xl text-balance text-lg text-fd-muted-foreground sm:text-xl">
+            <p className="mt-5 max-w-2xl text-balance text-base text-fd-muted-foreground sm:mt-7 sm:text-lg md:text-xl">
               MicroRTOS is a 3.5 KB real-time kernel for AVR and ARM
               Cortex-M — priority &amp; EDF scheduling, priority-inheritance
-              mutexes, queues, timers, and tickless idle. The whole thing
-              audits in an afternoon.
+              mutexes, queues, timers, and tickless idle.
             </p>
 
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+            <div className="mt-7 flex flex-wrap items-center justify-center gap-2 sm:mt-10 sm:gap-3">
               <ButtonLink
                 href="/docs/getting-started"
                 size="lg"
@@ -134,7 +140,7 @@ export default function HomePage() {
           </div>
 
           {/* Hero visual — code + board side by side, integrated with chips */}
-          <div className="relative mt-20">
+          <div className="relative mt-12 sm:mt-16 lg:mt-20">
             {/* Connector wire between code and board (lg only) */}
             <svg
               aria-hidden
@@ -158,21 +164,21 @@ export default function HomePage() {
               />
             </svg>
 
-            <div className="grid items-start gap-8 lg:grid-cols-5">
-              <div className="relative lg:col-span-3">
-                {/* Floating chip — top left, just above the code card */}
+            <div className="grid items-start gap-6 sm:gap-8 lg:grid-cols-5">
+              <div className="relative min-w-0 lg:col-span-3">
+                {/* Floating chips — hidden on phones / small tablets so
+                    they don't crowd the visual. Show from md (768px). */}
                 <FloatingChip
                   icon={Feather}
-                  className="absolute -left-3 -top-5 z-20 hidden sm:inline-flex"
+                  className="absolute -left-3 -top-5 z-20 hidden md:inline-flex"
                   variant="a"
                 >
                   Zero <span className="font-mono">malloc</span>
                 </FloatingChip>
-                {/* Floating chip — bottom left */}
                 <FloatingChip
                   icon={Lock}
                   accent
-                  className="absolute -bottom-4 left-10 z-20 hidden sm:inline-flex"
+                  className="absolute -bottom-4 left-10 z-20 hidden md:inline-flex"
                   variant="c"
                 >
                   Priority inheritance
@@ -268,12 +274,13 @@ export default function HomePage() {
                 </SyntaxCode>
               </div>
 
-              <div className="relative lg:col-span-2">
-                {/* Floating chip — top right */}
+              <div className="relative min-w-0 lg:col-span-2">
+                {/* Floating chip — top right, only from md so it doesn't
+                    overflow the container on phones. */}
                 <FloatingChip
                   icon={Lightbulb}
                   accent
-                  className="absolute -right-2 -top-5 z-20 hidden sm:inline-flex"
+                  className="absolute -right-2 -top-5 z-20 hidden md:inline-flex"
                   variant="b"
                 >
                   Pin 13 blinking · 1 Hz
@@ -282,25 +289,25 @@ export default function HomePage() {
                 <BoardMock className="animate-float-slow" />
 
                 {/* Live stat chips beneath board */}
-                <div className="mt-5 grid grid-cols-3 gap-3 text-center">
-                  <div className="group rounded-xl border border-fd-border bg-fd-card/60 px-3 py-2.5 backdrop-blur transition hover:border-fd-primary/30">
-                    <div className="font-mono text-base font-bold text-fd-foreground">
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center sm:mt-5 sm:gap-3">
+                  <div className="group rounded-xl border border-fd-border bg-fd-card/60 px-2 py-2 backdrop-blur transition hover:border-fd-primary/30 sm:px-3 sm:py-2.5">
+                    <div className="font-mono text-sm font-bold text-fd-foreground sm:text-base">
                       3.5 KB
                     </div>
                     <div className="text-[10px] uppercase tracking-wider text-fd-muted-foreground">
                       Flash
                     </div>
                   </div>
-                  <div className="group rounded-xl border border-fd-border bg-fd-card/60 px-3 py-2.5 backdrop-blur transition hover:border-fd-primary/30">
-                    <div className="font-mono text-base font-bold text-fd-foreground">
+                  <div className="group rounded-xl border border-fd-border bg-fd-card/60 px-2 py-2 backdrop-blur transition hover:border-fd-primary/30 sm:px-3 sm:py-2.5">
+                    <div className="font-mono text-sm font-bold text-fd-foreground sm:text-base">
                       518 B
                     </div>
                     <div className="text-[10px] uppercase tracking-wider text-fd-muted-foreground">
                       SRAM
                     </div>
                   </div>
-                  <div className="group rounded-xl border border-fd-border bg-fd-card/60 px-3 py-2.5 backdrop-blur transition hover:border-fd-primary/30">
-                    <div className="font-mono text-base font-bold text-fd-foreground">
+                  <div className="group rounded-xl border border-fd-border bg-fd-card/60 px-2 py-2 backdrop-blur transition hover:border-fd-primary/30 sm:px-3 sm:py-2.5">
+                    <div className="font-mono text-sm font-bold text-fd-foreground sm:text-base">
                       1 ms
                     </div>
                     <div className="text-[10px] uppercase tracking-wider text-fd-muted-foreground">
