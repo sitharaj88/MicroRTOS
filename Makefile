@@ -146,12 +146,14 @@ $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)/examples
 
 # Build library
-$(RTOS_LIB): $(CORE_OBJS)
+$(RTOS_LIB): $(CORE_OBJS) | $(BUILD_DIR)
 	@echo "Creating library: $@"
 	@$(AR) rcs $@ $^
 
-# Compile C files
-$(BUILD_DIR)/%.o: %.c
+# Compile C files. Build dir is an order-only dep so a top-level target
+# (`make flash`, `make example1`) creates it even if `make all` was not
+# the first thing the user ran.
+$(BUILD_DIR)/%.o: %.c | $(BUILD_DIR)
 	@echo "Compiling: $<"
 	@$(CC) $(CFLAGS) $< -o $@
 
@@ -290,12 +292,16 @@ AVRDUDE_FLAGS = -C $(AVRDUDE_CONF) -p atmega328p -c arduino -P $(PORT) -b 115200
 
 EXAMPLE_ELF = $(BUILD_DIR)/examples/example$(EXAMPLE).elf
 EXAMPLE_HEX = $(BUILD_DIR)/examples/example$(EXAMPLE).hex
+EXAMPLE_TGT = example$(EXAMPLE)
 
 # Build the .hex from the .elf by stripping debug sections.
-$(EXAMPLE_HEX): $(EXAMPLE_ELF)
+# The .elf is produced as a side-effect of the example$(N) target, so we
+# depend on that phony target to make sure the elf gets built (re)built
+# even when nothing tracks it explicitly.
+$(EXAMPLE_HEX): $(EXAMPLE_TGT)
 	@echo "Generating Intel HEX: $@"
-	@$(OBJCOPY) -O ihex -R .eeprom $< $@
-	@$(SIZE) $<
+	@$(OBJCOPY) -O ihex -R .eeprom $(EXAMPLE_ELF) $@
+	@$(SIZE) $(EXAMPLE_ELF)
 
 flash: $(EXAMPLE_HEX)
 	@if [ ! -e $(PORT) ]; then \
@@ -316,6 +322,12 @@ flash: $(EXAMPLE_HEX)
 # that a flash actually wrote what we intended.
 flash-verify: $(EXAMPLE_HEX)
 	@$(AVRDUDE) $(AVRDUDE_FLAGS) -U flash:v:$(EXAMPLE_HEX):i
+
+.PHONY: flash flash-verify all examples clean check check-features \
+        check-arm check-arm-features test debug strict analyze \
+        misra-check metrics docs safety-check example0 example1 example2 \
+        example3 example4 example5 example7 example8 example9 example10 \
+        example11
 
 # Clean
 clean:
