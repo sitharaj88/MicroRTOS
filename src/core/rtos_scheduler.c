@@ -206,13 +206,30 @@ void rtos_scheduler_switch_context(void)
     }
 #endif
 
-    /* Mark outgoing task as ready if it was running */
+    /*
+     * Mark outgoing task as ready if it was running, AND put it back on
+     * its ready list. Without the add_ready, a preempted task gets lost
+     * from the scheduler entirely: state says READY but the node sits in
+     * no list. Symptom on AVR: the system blinks once then deadlocks
+     * because the next yield finds no runnable task.
+     *
+     * If the current task is blocking (state already set to BLOCKED /
+     * SUSPENDED by task_delay, mutex_wait, etc.) the caller will have
+     * placed it on the appropriate wait list already, so we skip this.
+     */
     if (g_current_tcb != NULL && g_current_tcb->state == RTOS_TASK_RUNNING) {
         g_current_tcb->state = RTOS_TASK_READY;
+        rtos_scheduler_add_ready(g_current_tcb);
     }
 
-    /* Move new task to front (round-robin: it will go to end when preempted) */
-    rtos_list_remove(&g_ready_list[next_tcb->priority], &next_tcb->state_node);
+    /*
+     * Take the incoming task off the ready list and update the priority
+     * bitmap if the list is now empty. Calling rtos_list_remove directly
+     * (without clearing the bit) leaves a stale entry in g_ready_priorities,
+     * so the next select_next picks the empty priority and returns NULL,
+     * leaving the system unable to context-switch.
+     */
+    rtos_scheduler_remove_ready(next_tcb);
     next_tcb->state = RTOS_TASK_RUNNING;
 
     /* Update statistics for incoming task */

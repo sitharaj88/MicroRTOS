@@ -156,9 +156,18 @@ $(BUILD_DIR)/%.o: %.c
 	@$(CC) $(CFLAGS) $< -o $@
 
 # All examples
-examples: example1 example2 example3 example4 example5 example7 example8
+examples: example0 example1 example2 example3 example4 example5 example7 example8
 	@echo "All examples built successfully!"
 	@echo "Note: example6 (SMP) needs a multi-core port; see examples/06_smp_dual_core/README.md"
+
+# Example 0: Bare-metal blink (no RTOS — sanity-check the toolchain + hardware)
+example0:
+	@mkdir -p $(BUILD_DIR)/examples
+	@echo "Building example: 00_blink_baremetal"
+	@$(CC) $(CFLAGS_RELEASE) examples/00_blink_baremetal/main.c -o $(BUILD_DIR)/examples/example0.o
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example0.o -o $(BUILD_DIR)/examples/example0.elf
+	@$(SIZE) $(BUILD_DIR)/examples/example0.elf
+	@echo "Example 0 built successfully!"
 
 # Example 1: Basic Tasks
 example1: $(RTOS_LIB)
@@ -207,6 +216,30 @@ example7: $(RTOS_LIB)
 	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example7.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example7.elf
 	@$(SIZE) $(BUILD_DIR)/examples/example7.elf
 	@echo "Example 7 built successfully!"
+
+# Example 9: Minimal RTOS busy-wait blink (no task_delay, no timer ticks)
+example9: $(RTOS_LIB)
+	@echo "Building example: 09_blink_busywait"
+	@$(CC) $(CFLAGS) examples/09_blink_busywait/main.c -o $(BUILD_DIR)/examples/example9.o
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example9.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example9.elf
+	@$(SIZE) $(BUILD_DIR)/examples/example9.elf
+	@echo "Example 9 built successfully!"
+
+# Example 10: Single task using rtos_task_delay (tick wake-up test)
+example10: $(RTOS_LIB)
+	@echo "Building example: 10_blink_taskdelay"
+	@$(CC) $(CFLAGS) examples/10_blink_taskdelay/main.c -o $(BUILD_DIR)/examples/example10.o
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example10.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example10.elf
+	@$(SIZE) $(BUILD_DIR)/examples/example10.elf
+	@echo "Example 10 built successfully!"
+
+# Example 11: Diagnostic blink with 100ms delay (counts iterations)
+example11: $(RTOS_LIB)
+	@echo "Building example: 11_diag_blink"
+	@$(CC) $(CFLAGS) examples/11_diag_blink/main.c -o $(BUILD_DIR)/examples/example11.o
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example11.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example11.elf
+	@$(SIZE) $(BUILD_DIR)/examples/example11.elf
+	@echo "Example 11 built successfully!"
 
 # Example 8: EDF Deadline Scheduling
 # Built against a feature-enabled library — rtos_deadline.c needs

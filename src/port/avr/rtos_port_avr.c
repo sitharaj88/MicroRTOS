@@ -224,15 +224,23 @@ void rtos_port_init_task_stack(rtos_tcb_t *tcb, void (*entry)(void*), void *arg)
     /* Start at top of stack area */
     stack_top = (uint8_t *)tcb->stack_base + tcb->stack_size - 1;
 
-    /* Push return address (entry point) - little endian, low byte first */
+    /*
+     * Push return address (entry point) matching the AVR hardware
+     * interrupt-push order. On interrupt, hardware pushes PCL first
+     * (so PCL lands at the higher address) then PCH. `reti` reads
+     * PCH from the lower address first, then PCL from the higher.
+     * Writing in the opposite order — as this code did before — would
+     * make `reti` swap the bytes and jump to a corrupted PC.
+     */
     entry_addr = (uint16_t)entry;
 
+    *stack_top-- = (uint8_t)(entry_addr & 0xFF); /* PCL at highest addr */
+    *stack_top-- = (uint8_t)(entry_addr >> 8);   /* PCH below it */
 #if defined(__AVR_3_BYTE_PC__)
-    /* ATmega2560 and similar with >128KB flash use 3-byte PC */
-    *stack_top-- = 0;  /* High byte (usually 0) */
+    /* ATmega2560 (>128 KB flash) uses a 3-byte PC. PCEH lives at the
+     * lowest of the three PC bytes — code at low addresses has PCEH=0. */
+    *stack_top-- = 0;
 #endif
-    *stack_top-- = (uint8_t)(entry_addr >> 8);   /* High byte */
-    *stack_top-- = (uint8_t)(entry_addr & 0xFF); /* Low byte */
 
     /* Push initial register values */
     *stack_top-- = 0x00;    /* r0 */
@@ -295,7 +303,17 @@ void rtos_port_yield(void)
 
     RESTORE_CONTEXT();
 
-    /* Return continues in new task */
+    /*
+     * Return via reti (not the compiler's implicit ret).
+     *
+     * Why this matters: when the incoming task's saved SREG came from an
+     * ISR's SAVE_CONTEXT, the I bit on the stack is 0 (hardware cleared
+     * it on ISR entry, and SAVE_CONTEXT read SREG after that). A plain
+     * ret would leave the I bit cleared, so the resumed task runs with
+     * interrupts disabled — Timer0 stops firing and no task ever wakes.
+     * reti pops PC and sets I, matching what the ISR would have done.
+     */
+    __asm__ volatile ("reti");
 }
 
 /*===========================================================================*/

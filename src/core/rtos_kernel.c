@@ -205,8 +205,16 @@ void rtos_tick_handler(void)
     rtos_tick_hook();
 #endif
 
-    /* Trigger context switch if needed */
-    if (g_yield_pending && g_scheduler_suspended == 0) {
+    /*
+     * Trigger a context switch only when this handler is invoked from
+     * a non-ISR context. When called from the tick ISR the port has
+     * already saved context and will call rtos_scheduler_switch_context
+     * after we return; calling rtos_port_yield() here would re-enter
+     * SAVE_CONTEXT on top of the ISR's frame, overwriting the saved
+     * stack_ptr and corrupting the interrupted task's resume state.
+     */
+    if (g_yield_pending && g_scheduler_suspended == 0 &&
+        !rtos_port_is_in_isr()) {
         rtos_port_yield();
     }
 }

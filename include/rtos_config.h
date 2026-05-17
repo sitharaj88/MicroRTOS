@@ -91,7 +91,12 @@ extern "C" {
  */
 #ifndef RTOS_MINIMAL_STACK_SIZE
     #if RTOS_PLATFORM_AVR
-        #define RTOS_MINIMAL_STACK_SIZE     64
+        /*
+         * Same ~100 B budget as RTOS_IDLE_STACK_SIZE: enough to absorb
+         * the fake-ISR initial frame plus a real Timer0 ISR landing on
+         * the same task.
+         */
+        #define RTOS_MINIMAL_STACK_SIZE     128
     #else
         #define RTOS_MINIMAL_STACK_SIZE     128
     #endif
@@ -103,9 +108,18 @@ extern "C" {
  */
 #ifndef RTOS_IDLE_STACK_SIZE
     #if RTOS_PLATFORM_AVR
-        #define RTOS_IDLE_STACK_SIZE        48
+        /*
+         * AVR sizing budget:
+         *   ~35 B for the fake-ISR frame placed by rtos_port_init_task_stack
+         *   ~35 B for the Timer0 ISR's hardware PC push + SAVE_CONTEXT
+         *   ~30 B for nested calls inside the tick handler (process_delays,
+         *          timer_process, timeslice_tick)
+         * 128 B leaves comfortable headroom; 48 B was demonstrably too small
+         * (idle's stack overflowed on the very first tick).
+         */
+        #define RTOS_IDLE_STACK_SIZE        128
     #else
-        #define RTOS_IDLE_STACK_SIZE        64
+        #define RTOS_IDLE_STACK_SIZE        128
     #endif
 #endif
 
