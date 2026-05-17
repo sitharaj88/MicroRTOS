@@ -232,6 +232,58 @@ example8: $(EDF_LIB)
 	@$(SIZE) $(BUILD_DIR)/examples/example8.elf
 	@echo "Example 8 built successfully!"
 
+#==============================================================================
+# Flash to Arduino Uno
+#==============================================================================
+#
+# Usage:
+#   make flash EXAMPLE=1            -- flash example1 over /dev/ttyACM0
+#   make flash EXAMPLE=4 PORT=/dev/ttyACM1
+#
+# Requires:
+#   - avrdude in PATH (bundled with the Arduino toolchain)
+#   - User in the 'dialout' group so /dev/ttyACM* is writable
+#   - The selected example to have been built (we depend on the .elf)
+
+# Default to example 1 and the usual Uno serial port.
+EXAMPLE ?= 1
+PORT    ?= /dev/ttyACM0
+
+# Pull avrdude from the same toolchain bundle we use for avr-gcc.
+AVRDUDE      = $(ARDUINO_PATH)/tools/avrdude/8.0.0-arduino1/bin/avrdude
+AVRDUDE_CONF = $(ARDUINO_PATH)/tools/avrdude/8.0.0-arduino1/etc/avrdude.conf
+# Arduino Uno bootloader speaks the 'arduino' (stk500) protocol at 115200.
+AVRDUDE_FLAGS = -C $(AVRDUDE_CONF) -p atmega328p -c arduino -P $(PORT) -b 115200
+
+EXAMPLE_ELF = $(BUILD_DIR)/examples/example$(EXAMPLE).elf
+EXAMPLE_HEX = $(BUILD_DIR)/examples/example$(EXAMPLE).hex
+
+# Build the .hex from the .elf by stripping debug sections.
+$(EXAMPLE_HEX): $(EXAMPLE_ELF)
+	@echo "Generating Intel HEX: $@"
+	@$(OBJCOPY) -O ihex -R .eeprom $< $@
+	@$(SIZE) $<
+
+flash: $(EXAMPLE_HEX)
+	@if [ ! -e $(PORT) ]; then \
+		echo "ERROR: $(PORT) not found. Plug in the Uno or set PORT=..."; \
+		exit 1; \
+	fi
+	@if [ ! -w $(PORT) ]; then \
+		echo "ERROR: $(PORT) is not writable by you."; \
+		echo "       Add yourself to the dialout group: sudo usermod -aG dialout $$USER"; \
+		echo "       Then log out and back in, or run 'newgrp dialout'."; \
+		exit 1; \
+	fi
+	@echo "Flashing $(EXAMPLE_HEX) to $(PORT)..."
+	@$(AVRDUDE) $(AVRDUDE_FLAGS) -D -U flash:w:$(EXAMPLE_HEX):i
+	@echo "Done. Reset the board if it does not start automatically."
+
+# Read back the flash contents and print a hash. Useful for verifying
+# that a flash actually wrote what we intended.
+flash-verify: $(EXAMPLE_HEX)
+	@$(AVRDUDE) $(AVRDUDE_FLAGS) -U flash:v:$(EXAMPLE_HEX):i
+
 # Clean
 clean:
 	@rm -rf $(BUILD_DIR)
