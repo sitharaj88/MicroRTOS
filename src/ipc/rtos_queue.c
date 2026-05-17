@@ -205,7 +205,6 @@ rtos_status_t rtos_queue_send_front(
     const void *item,
     uint32_t timeout)
 {
-    rtos_tcb_t *current;
     rtos_status_t status = RTOS_OK;
     bool need_switch = false;
 
@@ -214,8 +213,6 @@ rtos_status_t rtos_queue_send_front(
     RTOS_ASSERT(!rtos_port_is_in_isr());
 
     rtos_port_enter_critical();
-
-    current = g_current_tcb;
 
     /* Check if queue has space */
     if (queue->count < queue->capacity) {

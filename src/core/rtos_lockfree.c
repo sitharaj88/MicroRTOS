@@ -8,6 +8,8 @@
  */
 
 #include "rtos_lockfree.h"
+#include "rtos_types.h"
+#include <stdint.h>
 #include <string.h>
 
 /*===========================================================================*/
@@ -163,15 +165,17 @@ void rtos_mpsc_push(rtos_mpsc_queue_t *queue, rtos_mpsc_node_t *node)
     /* Initialize node */
     node->next = NULL;
 
-    /* Atomically swap tail and get previous tail */
-    prev = (rtos_mpsc_node_t *)rtos_atomic_exchange(
+    /* Atomically swap tail and get previous tail.
+     * Pointers go through uintptr_t to make the size cast explicit; on AVR
+     * the 16-bit pointer is zero-extended to fit the 32-bit atomic word. */
+    prev = (rtos_mpsc_node_t *)(uintptr_t)rtos_atomic_exchange(
         (volatile uint32_t *)&queue->tail,
-        (uint32_t)node
+        (uint32_t)(uintptr_t)node
     );
 
     /* Link previous tail to new node */
     /* This store is release to make node visible */
-    rtos_atomic_store((volatile uint32_t *)&prev->next, (uint32_t)node);
+    rtos_atomic_store((volatile uint32_t *)&prev->next, (uint32_t)(uintptr_t)node);
 }
 
 rtos_mpsc_node_t *rtos_mpsc_pop(rtos_mpsc_queue_t *queue)
@@ -182,7 +186,7 @@ rtos_mpsc_node_t *rtos_mpsc_pop(rtos_mpsc_queue_t *queue)
     RTOS_ASSERT(queue != NULL);
 
     head = queue->head;
-    next = (rtos_mpsc_node_t *)rtos_atomic_load((volatile uint32_t *)&head->next);
+    next = (rtos_mpsc_node_t *)(uintptr_t)rtos_atomic_load((volatile uint32_t *)&head->next);
 
     /* Skip stub node */
     if (head == &queue->stub) {
@@ -191,7 +195,7 @@ rtos_mpsc_node_t *rtos_mpsc_pop(rtos_mpsc_queue_t *queue)
         }
         queue->head = next;
         head = next;
-        next = (rtos_mpsc_node_t *)rtos_atomic_load((volatile uint32_t *)&head->next);
+        next = (rtos_mpsc_node_t *)(uintptr_t)rtos_atomic_load((volatile uint32_t *)&head->next);
     }
 
     /* Normal case - next exists */
@@ -210,7 +214,7 @@ rtos_mpsc_node_t *rtos_mpsc_pop(rtos_mpsc_queue_t *queue)
     /* Re-insert stub to maintain invariant */
     rtos_mpsc_push(queue, &queue->stub);
 
-    next = (rtos_mpsc_node_t *)rtos_atomic_load((volatile uint32_t *)&head->next);
+    next = (rtos_mpsc_node_t *)(uintptr_t)rtos_atomic_load((volatile uint32_t *)&head->next);
     if (next != NULL) {
         queue->head = next;
         return head;
@@ -222,7 +226,7 @@ rtos_mpsc_node_t *rtos_mpsc_pop(rtos_mpsc_queue_t *queue)
 bool rtos_mpsc_is_empty(rtos_mpsc_queue_t *queue)
 {
     rtos_mpsc_node_t *head = queue->head;
-    rtos_mpsc_node_t *next = (rtos_mpsc_node_t *)rtos_atomic_load(
+    rtos_mpsc_node_t *next = (rtos_mpsc_node_t *)(uintptr_t)rtos_atomic_load(
         (volatile uint32_t *)&head->next);
 
     if (head == &queue->stub && next == NULL) {
@@ -352,13 +356,13 @@ void rtos_stack_push(rtos_lockfree_stack_t *stack, rtos_stack_node_t *node)
     RTOS_ASSERT(node != NULL);
 
     do {
-        old_top = (rtos_stack_node_t *)rtos_atomic_load(
+        old_top = (rtos_stack_node_t *)(uintptr_t)rtos_atomic_load(
             (volatile uint32_t *)&stack->top);
         node->next = old_top;
     } while (!rtos_atomic_compare_exchange_weak(
         (volatile uint32_t *)&stack->top,
         (uint32_t *)&old_top,
-        (uint32_t)node));
+        (uint32_t)(uintptr_t)node));
 }
 
 rtos_stack_node_t *rtos_stack_pop(rtos_lockfree_stack_t *stack)
@@ -369,20 +373,20 @@ rtos_stack_node_t *rtos_stack_pop(rtos_lockfree_stack_t *stack)
     RTOS_ASSERT(stack != NULL);
 
     do {
-        old_top = (rtos_stack_node_t *)rtos_atomic_load(
+        old_top = (rtos_stack_node_t *)(uintptr_t)rtos_atomic_load(
             (volatile uint32_t *)&stack->top);
 
         if (old_top == NULL) {
             return NULL;
         }
 
-        new_top = (rtos_stack_node_t *)rtos_atomic_load(
+        new_top = (rtos_stack_node_t *)(uintptr_t)rtos_atomic_load(
             (volatile uint32_t *)&old_top->next);
 
     } while (!rtos_atomic_compare_exchange_weak(
         (volatile uint32_t *)&stack->top,
         (uint32_t *)&old_top,
-        (uint32_t)new_top));
+        (uint32_t)(uintptr_t)new_top));
 
     return old_top;
 }

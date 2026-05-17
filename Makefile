@@ -70,7 +70,12 @@ CFLAGS_STRICT += -Wlogical-op
 CFLAGS_STRICT += -Wduplicated-cond
 CFLAGS_STRICT += -Wduplicated-branches
 CFLAGS_STRICT += -Wrestrict
+# -fanalyzer requires gcc >= 10. The bundled Arduino AVR toolchain (7.3) does
+# not have it; enable via `make strict ANALYZER=1` on a newer host gcc.
+ANALYZER ?= 0
+ifeq ($(ANALYZER),1)
 CFLAGS_STRICT += -fanalyzer
+endif
 CFLAGS_STRICT += -DRTOS_USE_ASSERT=1 -DRTOS_SAFETY_ENABLE=1
 
 # Default to release build
@@ -287,19 +292,33 @@ check-arm:
 #==============================================================================
 
 HOST_CC ?= gcc
-# Define RTOS_PLATFORM_AVR so rtos_config.h's platform guard passes; the list
-# module itself does not depend on any AVR-specific code. Disable RTOS_ASSERT
-# so we do not need to provide a target-side rtos_assert_failed() stub.
+# RTOS_PLATFORM_HOST short-circuits the chip-specific includes in rtos_port.h
+# so host tests link against plain libc. Host stubs provide rtos_assert_failed
+# and the kernel globals/port shims that the modules under test reference.
 HOST_CFLAGS = -std=gnu11 -O0 -g -Wall -Wextra -I./include \
-              -DRTOS_PLATFORM_AVR=1 -DRTOS_USE_ASSERT=0
+              -DRTOS_PLATFORM_HOST=1
+
+HOST_STUBS = tests/unit/host_stubs.c
+HOST_TEST_INC = -I tests/unit
 
 test: $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)/tests
 	@echo "Building host unit tests..."
-	@$(HOST_CC) $(HOST_CFLAGS) tests/unit/test_list.c src/core/rtos_list.c \
+	@$(HOST_CC) $(HOST_CFLAGS) $(HOST_TEST_INC) \
+		tests/unit/test_list.c $(HOST_STUBS) src/core/rtos_list.c \
 		-o $(BUILD_DIR)/tests/test_list
+	@$(HOST_CC) $(HOST_CFLAGS) $(HOST_TEST_INC) \
+		tests/unit/test_mempool.c $(HOST_STUBS) \
+		src/core/rtos_list.c src/memory/rtos_mempool.c \
+		-o $(BUILD_DIR)/tests/test_mempool
+	@$(HOST_CC) $(HOST_CFLAGS) $(HOST_TEST_INC) \
+		tests/unit/test_queue.c $(HOST_STUBS) \
+		src/core/rtos_list.c src/ipc/rtos_queue.c \
+		-o $(BUILD_DIR)/tests/test_queue
 	@echo "Running host unit tests..."
-	@$(BUILD_DIR)/tests/test_list
+	@set -e; for t in $(BUILD_DIR)/tests/test_list $(BUILD_DIR)/tests/test_mempool $(BUILD_DIR)/tests/test_queue; do \
+		$$t; \
+	done
 
 #==============================================================================
 # Debug Build
@@ -343,10 +362,14 @@ analyze: $(BUILD_DIR)
 	@echo "Running static analysis..."
 	@echo ""
 	@echo "=== GCC Static Analyzer ==="
-	@for src in $(CORE_SRCS); do \
-		echo "Analyzing: $$src"; \
-		$(CC) $(CFLAGS_STRICT) -fanalyzer $$src -o /dev/null 2>&1 | grep -E "warning:|error:" || true; \
-	done
+	@if $(CC) -fanalyzer -E - </dev/null >/dev/null 2>&1; then \
+		for src in $(CORE_SRCS); do \
+			echo "Analyzing: $$src"; \
+			$(CC) $(CFLAGS_STRICT) -fanalyzer $$src -o /dev/null 2>&1 | grep -E "warning:|error:" || true; \
+		done; \
+	else \
+		echo "Skipped: $(CC) does not support -fanalyzer (needs gcc >= 10)"; \
+	fi
 	@echo ""
 	@echo "=== cppcheck (if available) ==="
 	@if command -v $(CPPCHECK) >/dev/null 2>&1; then \

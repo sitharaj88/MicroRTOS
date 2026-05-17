@@ -119,7 +119,11 @@ void rtos_port_check_stack_overflow(void);
 /* Platform-Specific Includes                                                 */
 /*===========================================================================*/
 
-#if defined(RTOS_PLATFORM_AVR) && RTOS_PLATFORM_AVR
+#if defined(RTOS_PLATFORM_HOST) && RTOS_PLATFORM_HOST
+    /* Host build (unit tests). Pull in no chip headers. */
+    #define RTOS_INTERRUPT_STATE_TYPE   uint32_t
+
+#elif defined(RTOS_PLATFORM_AVR) && RTOS_PLATFORM_AVR
     /* AVR-specific declarations */
     #include <avr/io.h>
     #include <avr/interrupt.h>

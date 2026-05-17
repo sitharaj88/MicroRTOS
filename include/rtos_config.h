@@ -25,13 +25,13 @@ extern "C" {
  * - RTOS_PLATFORM_AVR: For ATmega328P, ATmega2560, etc.
  * - RTOS_PLATFORM_ARM: For ARM Cortex-M (Arduino Due, Zero, MKR)
  */
-#if !defined(RTOS_PLATFORM_AVR) && !defined(RTOS_PLATFORM_ARM)
+#if !defined(RTOS_PLATFORM_AVR) && !defined(RTOS_PLATFORM_ARM) && !defined(RTOS_PLATFORM_HOST)
     #if defined(__AVR__)
         #define RTOS_PLATFORM_AVR       1
     #elif defined(__arm__) || defined(__ARM_ARCH)
         #define RTOS_PLATFORM_ARM       1
     #else
-        #error "Unsupported platform. Define RTOS_PLATFORM_AVR or RTOS_PLATFORM_ARM"
+        #error "Unsupported platform. Define RTOS_PLATFORM_AVR, RTOS_PLATFORM_ARM, or RTOS_PLATFORM_HOST"
     #endif
 #endif
 

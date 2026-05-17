@@ -9,32 +9,14 @@
  * SPDX-License-Identifier: MIT
  */
 
-/* Compile RTOS_ASSERT out for host tests; we use plain assert() instead. */
-#define RTOS_USE_ASSERT 0
-/* Pretend to be the AVR platform so rtos_config.h does not error out;
- * the list module does not actually touch any platform code.  */
-#define RTOS_PLATFORM_AVR 1
-
 #include "rtos_list.h"
+#include "test_harness.h"
 
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
-/*===========================================================================*/
-/* Tiny test harness                                                          */
-/*===========================================================================*/
-
-static int tests_run = 0;
-static int tests_failed = 0;
-
-#define CHECK(cond) do {                                                       \
-    tests_run++;                                                               \
-    if (!(cond)) {                                                             \
-        tests_failed++;                                                        \
-        fprintf(stderr, "FAIL: %s:%d: %s\n", __FILE__, __LINE__, #cond);       \
-    }                                                                          \
-} while (0)
+TEST_DEFINE_GLOBALS();
 
 /*===========================================================================*/
 /* Test cases                                                                 */
@@ -145,6 +127,5 @@ int main(void)
     test_insert_sorted_ascending();
     test_remove_arbitrary();
 
-    printf("Ran %d checks; %d failed.\n", tests_run, tests_failed);
-    return tests_failed == 0 ? 0 : 1;
+    TEST_REPORT("list");
 }
