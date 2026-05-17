@@ -1,9 +1,19 @@
 name: Docs site
 
-# Manual trigger only — run this workflow from the Actions tab when you
-# want to publish a new version of the docs to GitHub Pages. Avoids
-# noisy deploys on every push and keeps publishing intentional.
+# Auto-deploy on push to main when docs-site or this workflow changes;
+# also build (but don't deploy) on pull requests so we catch breakage
+# before merge. workflow_dispatch stays available for forced redeploys.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs-site/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs-site/**'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
@@ -11,14 +21,15 @@ permissions:
   pages: write
   id-token: write
 
-# Allow only one concurrent deploy.
+# Don't queue stacked builds on rapid pushes — the latest commit wins.
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: docs-site
@@ -35,7 +46,18 @@ jobs:
           cache: pnpm
           cache-dependency-path: docs-site/pnpm-lock.yaml
 
-      - run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Cache the Next.js build between runs. The hash of source files is
+      # part of the key so a code change invalidates the cache cleanly.
+      - name: Cache Next.js build
+        uses: actions/cache@v4
+        with:
+          path: docs-site/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('docs-site/pnpm-lock.yaml') }}-${{ hashFiles('docs-site/**/*.{ts,tsx,js,jsx,mdx,css}') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('docs-site/pnpm-lock.yaml') }}-
 
       - name: Build static site
         env:
@@ -46,20 +68,29 @@ jobs:
         run: pnpm build
 
       # GitHub Pages requires .nojekyll so it doesn't strip _next/ paths.
-      - run: touch out/.nojekyll
+      - name: Disable Jekyll
+        run: touch out/.nojekyll
 
-      - uses: actions/configure-pages@v5
+      - name: Configure Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: docs-site/out
 
+  # Deploy only on push to main or manual dispatch — never on PRs.
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
