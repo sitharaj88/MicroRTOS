@@ -93,11 +93,46 @@ const config: Config = {
           '0%, 100%': { opacity: '0.6' },
           '50%': { opacity: '1' },
         },
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-8px)' },
+        },
+        'float-slow': {
+          '0%, 100%': { transform: 'translateY(0) translateX(0)' },
+          '33%': { transform: 'translateY(-12px) translateX(6px)' },
+          '66%': { transform: 'translateY(8px) translateX(-4px)' },
+        },
+        'orb-1': {
+          '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
+          '50%': { transform: 'translate(40px, -30px) scale(1.05)' },
+        },
+        'orb-2': {
+          '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
+          '50%': { transform: 'translate(-30px, 40px) scale(0.95)' },
+        },
+        'beam': {
+          '0%': { transform: 'translateY(-100%) rotate(0deg)' },
+          '100%': { transform: 'translateY(100vh) rotate(0deg)' },
+        },
+        'pulse-soft': {
+          '0%, 100%': { opacity: '0.4' },
+          '50%': { opacity: '0.8' },
+        },
+        'bar-grow': {
+          '0%': { transform: 'scaleX(0)', transformOrigin: 'left' },
+          '100%': { transform: 'scaleX(1)', transformOrigin: 'left' },
+        },
       },
       animation: {
         shimmer: 'shimmer 2.5s linear infinite',
         'fade-in-up': 'fade-in-up 0.6s ease-out',
         glow: 'glow 3s ease-in-out infinite',
+        float: 'float 4s ease-in-out infinite',
+        'float-slow': 'float-slow 9s ease-in-out infinite',
+        'orb-1': 'orb-1 14s ease-in-out infinite',
+        'orb-2': 'orb-2 18s ease-in-out infinite',
+        'pulse-soft': 'pulse-soft 4s ease-in-out infinite',
+        'bar-grow': 'bar-grow 1s ease-out forwards',
       },
       backgroundImage: {
         'mesh-light': `
