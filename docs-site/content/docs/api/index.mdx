@@ -1,0 +1,89 @@
+---
+title: API Reference
+description: Every public function, organized by module.
+icon: Code2
+---
+
+The full public surface is exposed by a single header:
+
+```c
+#include "rtos.h"
+```
+
+Internally that pulls in everything else. You don't need to include
+sub-headers individually.
+
+## Modules
+
+<Cards>
+  <Card title="Kernel" href="/docs/api/kernel" description="kernel_init, kernel_start, tick_get" />
+  <Card title="Tasks" href="/docs/api/tasks" description="create, delay, yield, suspend, resume" />
+  <Card title="Mutex" href="/docs/api/mutex" description="init, lock, unlock — with priority inheritance" />
+  <Card title="Semaphore" href="/docs/api/semaphore" description="init, take, give, give_from_isr" />
+  <Card title="Event groups" href="/docs/api/event" description="set, clear, wait — any/all bit patterns" />
+  <Card title="Queue" href="/docs/api/queue" description="init, send, receive, peek (+ from_isr variants)" />
+  <Card title="Memory pool" href="/docs/api/mempool" description="init, alloc, free, available" />
+  <Card title="Timer" href="/docs/api/timer" description="init, start, stop, change_period" />
+  <Card title="Deadline (EDF)" href="/docs/api/deadline" description="task_create, job_complete, set_miss_callback" />
+  <Card title="Tickless" href="/docs/api/tickless" description="init, enable, set_sleep_mode, hooks" />
+  <Card title="Notifications" href="/docs/api/notifications" description="lightweight task signaling" />
+</Cards>
+
+## Conventions
+
+All public functions follow the same conventions:
+
+- **Return type `rtos_status_t`** — `RTOS_OK` (0) on success, one of the
+  error constants otherwise.
+- **Timeout argument** — milliseconds expressed as ticks via
+  `RTOS_MS_TO_TICKS(ms)`. `RTOS_NO_WAIT` (0) for non-blocking,
+  `RTOS_WAIT_FOREVER` (`UINT32_MAX`) for indefinite.
+- **`_from_isr` variants** — call these from interrupt context. They
+  never block and may set a `*yield_required` flag if a context switch
+  should follow.
+
+## Error codes
+
+```c
+typedef enum {
+    RTOS_OK              = 0,
+    RTOS_ERR_TIMEOUT     = 1,
+    RTOS_ERR_FULL        = 2,
+    RTOS_ERR_EMPTY       = 3,
+    RTOS_ERR_PARAM       = 4,
+    RTOS_ERR_STATE       = 5,
+    RTOS_ERR_NOMEM       = 6,
+    RTOS_ERR_DELETED     = 7,
+    RTOS_ERR_ISR         = 8,
+} rtos_status_t;
+```
+
+Check the return value. The kernel never sets `errno`.
+
+## Time
+
+```c
+#define RTOS_MS_TO_TICKS(ms)    (((uint32_t)(ms) * RTOS_TICK_RATE_HZ) / 1000U)
+#define RTOS_TICKS_TO_MS(t)     ((uint32_t)(t) * 1000U / RTOS_TICK_RATE_HZ)
+
+#define RTOS_WAIT_FOREVER       ((uint32_t)0xFFFFFFFF)
+#define RTOS_NO_WAIT            ((uint32_t)0)
+
+uint32_t rtos_tick_get(void);   /* free-running 32-bit tick counter */
+```
+
+## Headers, by module
+
+| Module | Public header |
+|---|---|
+| Kernel | `include/rtos.h` |
+| Tasks | `include/rtos_task.h` |
+| Mutex | `include/rtos_mutex.h` |
+| Semaphore | `include/rtos_semaphore.h` |
+| Event | `include/rtos_event.h` |
+| Queue | `include/rtos_queue.h` |
+| Memory pool | `include/rtos_memory.h` |
+| Timer | `include/rtos_timer.h` |
+| Deadline | `include/rtos_deadline.h` |
+| Tickless | `include/rtos_tickless.h` |
+| Port | `include/rtos_port.h` |

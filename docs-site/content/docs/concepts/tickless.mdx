@@ -1,0 +1,93 @@
+---
+title: Tickless idle
+description: Stop the tick when nothing's happening.
+---
+
+The default scheduler runs Timer0 at 1 kHz so every 1 ms you wake the
+CPU, run the tick handler, and probably go right back to sleep. For
+battery-powered designs this is wasteful — most of those wake-ups have
+nothing to do.
+
+Tickless idle fixes this: when the system goes idle, the kernel computes
+the time to the next scheduled event (delayed task, software timer) and
+**reprograms the hardware timer** to fire then. The CPU enters sleep
+mode and stays there until the long-range timer or an external interrupt
+wakes it.
+
+## Enable it
+
+```c
+/* In rtos_config.h or your build */
+#define RTOS_USE_TICKLESS_IDLE  1
+#define RTOS_TICKLESS_MIN_TICKS 2     /* don't go tickless for <2 ticks */
+```
+
+Then initialize and enable in `main`:
+
+```c
+rtos_kernel_init();
+/* create tasks */
+rtos_tickless_init();
+rtos_tickless_enable(true);
+rtos_tickless_set_sleep_mode(RTOS_SLEEP_IDLE);   /* or POWER_DOWN */
+rtos_kernel_start();
+```
+
+## Sleep modes (AVR)
+
+| Mode | Wake sources | Power saving |
+|---|---|---|
+| `RTOS_SLEEP_IDLE` | Any interrupt (incl. timers) | Modest — CPU only stops |
+| `RTOS_SLEEP_ADC` | Most interrupts | A bit more |
+| `RTOS_SLEEP_STANDBY` | External pins, watchdog | Significant |
+| `RTOS_SLEEP_POWER_DOWN` | External pins, WD only | Maximum |
+
+Deeper modes save more power but take longer to wake. Pick based on
+your latency budget.
+
+## Hooks
+
+If you have hardware to put to sleep (sensors, radios), implement:
+
+```c
+#define RTOS_USE_TICKLESS_HOOKS 1
+
+void rtos_tickless_pre_sleep_hook(uint32_t expected_ticks) {
+    /* Power down peripherals you don't need */
+}
+void rtos_tickless_post_sleep_hook(uint32_t slept_ticks) {
+    /* Power them back up */
+}
+```
+
+The kernel calls these around every sleep cycle.
+
+## Statistics
+
+```c
+uint32_t cycles = rtos_tickless_get_sleep_count();
+uint32_t ticks  = rtos_tickless_get_total_slept();
+```
+
+Use these to verify you're actually sleeping. A noisy system (lots of
+interrupts) might enter tickless mode but barely sleep. Statistics tell
+you.
+
+## Caveats
+
+- **Tick count must remain accurate.** When the CPU wakes from a long
+  sleep, the kernel "catches up" `g_tick_count` by however many ticks
+  it slept. Code that assumes ticks are monotonic and 1 ms apart still
+  works.
+- **External interrupts wake you.** If you depend on an external pin
+  to wake from `POWER_DOWN`, make sure the pin is configured as an
+  external interrupt source.
+- **Some peripherals stop in deep sleep.** USART, ADC, SPI — all stop
+  in `POWER_DOWN`. Use a shallower mode if you need them.
+
+## Example
+
+See [example 5](/docs/examples#05-tickless-low-power) for a working
+sensor task that sleeps for 5 seconds at a time using `POWER_DOWN`.
+Measured current draw on an Uno: ~0.3 mA average vs ~12 mA constantly
+ticking — a 40× improvement.

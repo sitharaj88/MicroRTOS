@@ -1,0 +1,75 @@
+---
+title: Memory pool
+description: Fixed-block O(1) allocation.
+---
+
+Enabled by `RTOS_USE_MEMORY_POOLS=1` (default).
+
+## `rtos_mempool_init`
+
+```c
+void rtos_mempool_init(rtos_mempool_t *pool,
+                       void           *buffer,
+                       uint16_t        block_size,
+                       uint16_t        block_count);
+```
+
+| Argument | Meaning |
+|---|---|
+| `buffer` | Caller-allocated storage, `block_size * block_count` bytes |
+| `block_size` | Bytes per block (must be `>= sizeof(void *)`; rounded up otherwise) |
+| `block_count` | Number of blocks |
+
+## `rtos_mempool_alloc`
+
+```c
+void *rtos_mempool_alloc(rtos_mempool_t *pool, uint32_t timeout);
+```
+
+Returns a pointer to a free block, or `NULL` on timeout. Blocks up to
+`timeout` ticks if the pool is empty.
+
+## `rtos_mempool_free`
+
+```c
+rtos_status_t rtos_mempool_free(rtos_mempool_t *pool, void *block);
+```
+
+Returns a block to the pool. Validates that the block is within the
+pool's range (`RTOS_ERR_PARAM` otherwise).
+
+## ISR-safe variants
+
+```c
+void          *rtos_mempool_alloc_from_isr(rtos_mempool_t *pool);
+rtos_status_t  rtos_mempool_free_from_isr(rtos_mempool_t *pool,
+                                           void *block,
+                                           bool *yield_required);
+```
+
+## Queries
+
+```c
+uint16_t rtos_mempool_available(rtos_mempool_t *pool);
+uint16_t rtos_mempool_total(rtos_mempool_t *pool);
+uint16_t rtos_mempool_block_size(rtos_mempool_t *pool);
+bool     rtos_mempool_is_empty(rtos_mempool_t *pool);
+```
+
+## Example
+
+```c
+#define SLOTS 8
+#define SIZE  32
+
+static uint8_t        memory[SIZE * SLOTS];
+static rtos_mempool_t pool;
+
+void init(void) {
+    rtos_mempool_init(&pool, memory, SIZE, SLOTS);
+}
+
+void *buf = rtos_mempool_alloc(&pool, RTOS_WAIT_FOREVER);
+/* fill, hand to another task */
+rtos_mempool_free(&pool, buf);   /* eventually */
+```

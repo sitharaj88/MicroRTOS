@@ -1,0 +1,108 @@
+---
+title: Kernel
+description: Initialization, startup, ticks.
+---
+
+```c
+#include "rtos.h"
+```
+
+## `rtos_kernel_init`
+
+```c
+void rtos_kernel_init(void);
+```
+
+Initializes the scheduler, the ready and delayed lists, the priority
+bitmap, and creates the **idle task**. Call this exactly once before any
+other RTOS function.
+
+After this returns, you can create tasks. The scheduler is not yet
+running — that happens at `rtos_kernel_start()`.
+
+## `rtos_kernel_start`
+
+```c
+void rtos_kernel_start(void);
+```
+
+Initializes the port (configures the tick timer), picks the
+highest-priority ready task, and switches to it. **Never returns.**
+
+If no tasks were created (other than idle), this still works — idle
+runs by itself, but nothing else will ever happen.
+
+## `rtos_tick_get`
+
+```c
+uint32_t rtos_tick_get(void);
+```
+
+Returns the free-running 32-bit tick counter. Incremented every
+`1 / RTOS_TICK_RATE_HZ` seconds (1 ms by default).
+
+Useful for measuring elapsed time:
+
+```c
+uint32_t start = rtos_tick_get();
+do_work();
+uint32_t elapsed_ms = (rtos_tick_get() - start) /* * 1000 / RTOS_TICK_RATE_HZ */;
+```
+
+Tick wraparound happens at `2^32` ticks ≈ 49 days. Compute deltas with
+unsigned subtraction (the math wraps correctly).
+
+## `rtos_kernel_state_get`
+
+```c
+rtos_kernel_state_t rtos_kernel_state_get(void);
+```
+
+Returns one of:
+
+| Value | Meaning |
+|---|---|
+| `RTOS_KERNEL_NOT_STARTED` | `rtos_kernel_start` has not been called |
+| `RTOS_KERNEL_RUNNING` | Scheduler is running |
+| `RTOS_KERNEL_SUSPENDED` | Scheduler is suspended (rare; via `rtos_scheduler_suspend`) |
+
+## `rtos_scheduler_suspend` / `rtos_scheduler_resume`
+
+```c
+void rtos_scheduler_suspend(void);
+void rtos_scheduler_resume(void);
+```
+
+Temporarily disables context switches without disabling interrupts. ISRs
+still run; they may set `g_yield_pending` but no switch happens until
+`resume`. Useful for atomic, multi-step state changes that must be
+visible all-at-once.
+
+Nest with care — calls must balance.
+
+## `rtos_critical_enter` / `rtos_critical_exit`
+
+```c
+void rtos_critical_enter(void);
+void rtos_critical_exit(void);
+```
+
+Disables interrupts (with nesting). The strongest form of mutual
+exclusion. Use sparingly — too-long critical sections hurt interrupt
+latency.
+
+For most synchronization, prefer a mutex.
+
+## Hooks (optional)
+
+Define these in your application to receive callbacks:
+
+```c
+void rtos_idle_hook(void);          /* enable via RTOS_USE_IDLE_HOOK */
+void rtos_tick_hook(void);          /* enable via RTOS_USE_TICK_HOOK */
+void rtos_stack_overflow_hook(rtos_tcb_t *tcb);  /* always called on overflow */
+void rtos_assert_failed(const char *file, int line);  /* called on assert */
+```
+
+Each has a weak default in the kernel. Provide your own if you want to
+log or recover.

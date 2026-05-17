@@ -1,0 +1,162 @@
+---
+title: First blink, explained
+description: A line-by-line walk through example 10.
+---
+
+`examples/10_blink_taskdelay/main.c` is the minimum useful RTOS program:
+one task that toggles a pin, sleeps via `rtos_task_delay`, and repeats.
+
+```c title="examples/10_blink_taskdelay/main.c"
+#include "rtos.h"
+
+#ifdef __AVR__
+#include <avr/io.h>
+#define LED_PIN     PB5
+#define LED_DDR     DDRB
+#define LED_PORT    PORTB
+#endif
+
+static rtos_tcb_t t1;
+static uint8_t    t1_stack[128];
+
+static void blinker(void *arg)
+{
+    (void)arg;
+    while (1) {
+        LED_PORT ^= (1 << LED_PIN);
+        rtos_task_delay(RTOS_MS_TO_TICKS(500));
+    }
+}
+
+int main(void)
+{
+    LED_DDR  |=  (1 << LED_PIN);
+    LED_PORT &= ~(1 << LED_PIN);
+
+    rtos_kernel_init();
+    rtos_task_create(&t1, "blink", blinker, NULL, 2,
+                     t1_stack, sizeof(t1_stack));
+    rtos_kernel_start();
+    return 0;
+}
+```
+
+## What every line does
+
+### Task storage
+
+```c
+static rtos_tcb_t t1;
+static uint8_t    t1_stack[128];
+```
+
+A **TCB** (Task Control Block) is a struct that holds the task's saved
+registers, priority, state, and list nodes. We allocate one statically.
+The 128-byte stack is also static — never `malloc`'d.
+
+<Callout type="info">
+Why 128 bytes? It's `RTOS_MINIMAL_STACK_SIZE` on AVR. It accounts for the
+33-byte register save plus interrupt frame plus typical call depth. You can
+go smaller for trivial tasks, but the assertion checker will yell at you.
+</Callout>
+
+### The task function
+
+```c
+static void blinker(void *arg)
+{
+    (void)arg;
+    while (1) {
+        LED_PORT ^= (1 << LED_PIN);
+        rtos_task_delay(RTOS_MS_TO_TICKS(500));
+    }
+}
+```
+
+Tasks are `void`-returning functions that take an opaque `arg`. They run
+forever — returning from a task is undefined (don't do it). The body:
+
+1. **`LED_PORT ^= (1 << LED_PIN);`** Toggle pin 13. Plain AVR I/O — no
+   abstraction layer.
+2. **`rtos_task_delay(RTOS_MS_TO_TICKS(500));`** Block this task for 500
+   ticks (500 ms at the default 1 kHz tick rate). The scheduler removes
+   this TCB from the ready list, adds it to the delayed list with
+   `wake_tick = current_tick + 500`, and switches to another ready
+   task — `idle_task` in this example.
+
+### Kernel setup
+
+```c
+rtos_kernel_init();
+```
+
+Zeros the ready lists, the delayed list, and the priority bitmap. Creates
+the **idle task** internally — a low-priority task that just runs an
+infinite empty loop when nothing else is ready. The kernel won't start
+without it.
+
+### Task creation
+
+```c
+rtos_task_create(&t1, "blink", blinker, NULL, 2,
+                 t1_stack, sizeof(t1_stack));
+```
+
+Five things happen here:
+
+1. `t1` is zeroed.
+2. The stack is filled with the canary pattern `0xA5` for overflow
+   detection.
+3. `rtos_port_init_task_stack` lays down a fake interrupt frame so the
+   very first `reti` jumps cleanly to `blinker`.
+4. `t1` is inserted into `g_ready_list[2]` (priority 2 — lower numbers
+   are higher priority).
+5. The priority-2 bit is set in `g_ready_priorities`.
+
+### Starting the scheduler
+
+```c
+rtos_kernel_start();
+```
+
+This call does not return. It:
+
+1. Calls `rtos_port_init()` which sets up Timer0 in CTC mode with
+   `OCR0A = 249` (1 kHz tick at 16 MHz, prescaler 64) and enables the
+   compare-match interrupt.
+2. Calls `rtos_scheduler_switch_context()` to pick the highest-priority
+   ready task — `t1`.
+3. Calls `rtos_port_start_scheduler()` which does `RESTORE_CONTEXT()`
+   from `t1`'s stack and then `reti` — jumping to `blinker` with
+   interrupts enabled.
+
+## What you see on the board
+
+| Time | Event |
+|---|---|
+| t=0 ms | `blinker` enters, toggles LED on, calls `task_delay(500)`. |
+| t=0–500 ms | `blinker` is BLOCKED. Idle runs. Timer0 fires every ms; tick handler decrements no one. |
+| t=500 ms | Tick handler finds `wake_tick == g_tick_count`, moves `t1` back to ready. Tail of ISR runs `switch_context` which picks `t1` and `reti`s into it. |
+| t=500 ms | `blinker` resumes, toggles LED off, calls `task_delay(500)`. |
+| ... | Cycle repeats forever at 1 Hz. |
+
+## Modifying it
+
+Try changing the delay to 100 ms and re-flashing:
+
+```c
+rtos_task_delay(RTOS_MS_TO_TICKS(100));
+```
+
+```bash
+make flash EXAMPLE=10
+```
+
+LED now blinks at 5 Hz. The kernel does the same work — only the wake
+time changes.
+
+## Next
+
+You've seen the minimum. Now read [Concepts](/docs/concepts) to understand
+how the scheduler, sync primitives, and IPC fit together — or jump to
+[Examples](/docs/examples) for runnable code for every feature.

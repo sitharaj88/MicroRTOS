@@ -1,0 +1,55 @@
+---
+title: Overview
+description: From zero to a blinking LED in five minutes.
+icon: Rocket
+---
+
+This is the fast path. By the end you'll have an Arduino Uno running a real
+RTOS task that toggles the on-board LED via `rtos_task_delay()`.
+
+<Steps>
+  <Step>
+    **Install prerequisites.** A C toolchain (avr-gcc), `make`, and `avrdude`.
+    See [Install](/docs/getting-started/install) for details. On Ubuntu:
+    ```bash
+    sudo apt install gcc-avr avr-libc avrdude make
+    ```
+  </Step>
+  <Step>
+    **Clone and build.**
+    ```bash
+    git clone https://github.com/sitharaj88/rtos
+    cd rtos
+    make all
+    ```
+    This produces `build/librtos.a` (~21 KB). See [Build](/docs/getting-started/build).
+  </Step>
+  <Step>
+    **Flash a board.** Plug in an Uno and run:
+    ```bash
+    make flash EXAMPLE=10
+    ```
+    The on-board LED on pin 13 should blink at 1 Hz. See
+    [Flash](/docs/getting-started/flash) if anything goes wrong.
+  </Step>
+  <Step>
+    **Read the walkthrough.** [First blink](/docs/getting-started/first-blink)
+    breaks down the example line-by-line — what each call does, why the task
+    has a stack, and how the scheduler picks it.
+  </Step>
+</Steps>
+
+## What you'll learn
+
+By the end of Get Started you'll understand:
+
+- How to create a task with a static TCB and stack
+- How `rtos_task_delay` interacts with the scheduler
+- How the Makefile organizes builds, examples, and flashing
+- Where to go next for advanced features
+
+<Callout type="info">
+  This guide assumes an Arduino Uno (ATmega328P @ 16 MHz). The kernel also runs
+  on ATmega2560, ATmega32U4, and ARM Cortex-M targets — see
+  [Porting](/docs/porting) for the differences.
+</Callout>

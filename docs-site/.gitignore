@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+
+# Fumadocs MDX generated source
+.source/
+
+# Misc
+*.log
+.DS_Store
+.env*.local
+
+# IDE
+.vscode/
+.idea/

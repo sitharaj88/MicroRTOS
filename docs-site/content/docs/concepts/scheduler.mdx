@@ -1,0 +1,165 @@
+---
+title: Scheduler
+description: Priority-based preemptive scheduling, with optional EDF.
+---
+
+The scheduler is the heart of the kernel. Two modes share the same data
+structures:
+
+- **Fixed priority** (default) — every task has a static priority. The
+  highest-priority ready task runs. Equal priorities round-robin.
+- **Earliest Deadline First** (`RTOS_USE_EDF_SCHEDULER=1`) — opt in
+  per task. EDF tasks coexist with fixed-priority tasks; the scheduler
+  picks the most-urgent EDF deadline before any fixed-priority task at
+  its level.
+
+## Priority model
+
+```
+Priority 0  ──── highest  ──┐
+Priority 1                  │  Lower number = higher priority.
+Priority 2                  │  Default RTOS_MAX_PRIORITIES = 8.
+...                         │
+Priority 7  ──── lowest  ───┘  Idle task lives here.
+```
+
+Each priority has its own ready list. A bitmap (`g_ready_priorities`)
+tracks which priorities have ready tasks so `select_next` can find the
+winner in `O(1)`:
+
+```c
+uint8_t find_highest_priority(void) {
+    return __builtin_ctz(g_ready_priorities);   // count trailing zeros
+}
+```
+
+<Callout type="info">
+Priorities are 0..`RTOS_MAX_PRIORITIES - 1`. The kernel asserts the
+priority you pass to `rtos_task_create` is in range.
+</Callout>
+
+## States
+
+```
+            rtos_task_create
+                  │
+                  ▼
+              ┌────────┐
+              │ READY  │◄──── tick wakes from delay
+              └────┬───┘      ◄──── mutex/sem release
+                   │ scheduler picks
+                   ▼
+              ┌────────┐
+       ┌──────┤RUNNING ├──────┐
+       │      └────────┘      │
+       │ task_delay()        │ rtos_task_suspend()
+       ▼                      ▼
+   ┌────────┐            ┌─────────┐
+   │BLOCKED │            │SUSPENDED│
+   └────────┘            └─────────┘
+```
+
+| State | When | What it means |
+|---|---|---|
+| `READY` | After creation or after wake | In a ready list, eligible to run |
+| `RUNNING` | One task at a time | `g_current_tcb` points here |
+| `BLOCKED` | After `task_delay`, mutex wait, etc. | On a wait list or delayed list |
+| `SUSPENDED` | After `task_suspend` | Off all lists until `task_resume` |
+
+## Context switching
+
+A context switch happens in two places:
+
+### Voluntary — `rtos_port_yield()`
+
+Called from inside `rtos_task_delay`, mutex wait, queue wait, etc. The
+sequence on AVR:
+
+1. `SAVE_CONTEXT()` macro pushes all 32 GPRs + SREG onto the current
+   task's stack. Saves SP to `g_current_tcb->stack_ptr`.
+2. `rtos_scheduler_switch_context()` picks the next ready task and
+   updates `g_current_tcb`. If the outgoing task is still RUNNING (e.g.
+   forced preemption), it's added back to the ready list.
+3. `RESTORE_CONTEXT()` loads SP from the new `g_current_tcb->stack_ptr`
+   and pops all 32 GPRs + SREG.
+4. `reti` pops PC and sets the I bit.
+
+### Preemptive — Timer0 ISR
+
+On every tick (1 ms by default), the timer ISR runs `rtos_tick_handler`
+which:
+
+1. Increments `g_tick_count`.
+2. Walks the delayed list — wakes any task whose `wake_tick` is due.
+3. Optionally decrements the timeslice if `RTOS_USE_TIMESLICING=1`.
+4. Calls `rtos_scheduler_switch_context()` to pick the highest-priority
+   ready task. If it changed, the ISR's `RESTORE_CONTEXT` restores the
+   new task's state instead of the interrupted one.
+
+## Ready list management
+
+Each ready list is a doubly-linked intrusive FIFO. Operations:
+
+| Operation | Complexity | Used by |
+|---|---|---|
+| `rtos_scheduler_add_ready` | O(1) tail insert | task wake, task create |
+| `rtos_scheduler_remove_ready` | O(1) unlink | task block, context switch |
+| `rtos_scheduler_select_next` | O(1) bitmap + head peek | every switch |
+
+Within a priority, the list is FIFO. Equal-priority tasks round-robin
+when `RTOS_USE_TIMESLICING=1` and a task's `timeslice_remaining` hits
+zero.
+
+## EDF mode
+
+When `RTOS_USE_EDF_SCHEDULER=1`, you can register a task as an EDF
+task on top of its fixed priority:
+
+```c
+rtos_deadline_task_create(&task_tcb,
+                          /* period   */ 50,   /* ms */
+                          /* deadline */ 40,
+                          /* wcet     */ 5);
+```
+
+Each tick, the EDF scheduler:
+
+1. Releases jobs that are due (per `period_ticks`).
+2. Checks deadline misses, calls a per-task miss callback if any.
+3. Tracks utilization for admission analysis.
+
+EDF tasks must call `rtos_deadline_job_complete()` at the end of each
+job — that's how the scheduler knows the job is done and the next
+release should be scheduled.
+
+See [example 8](/docs/examples#08-edf-deadline) for a working setup.
+
+## Why a bitmap?
+
+It's the difference between O(N) and O(1). With 8 priorities and an
+N-element bitmap, finding the winner is one instruction. With 32 it's
+still one instruction. The bitmap is a `uint32_t` regardless of how many
+priorities you configure, so the cost doesn't scale up.
+
+On AVR, `__builtin_ctz(uint32_t)` compiles to a small loop — still
+constant time relative to your task count.
+
+## Tunables
+
+```c
+// include/rtos_config.h
+#define RTOS_MAX_PRIORITIES         8
+#define RTOS_TICK_RATE_HZ           1000
+#define RTOS_USE_TIMESLICING        1
+#define RTOS_TIMESLICE_TICKS        10
+#define RTOS_USE_PREEMPTION         1
+```
+
+- **`RTOS_MAX_PRIORITIES`** — every priority adds one `rtos_list_t`
+  (~6 B on AVR). Eight is typical; bump it for complex systems.
+- **`RTOS_TICK_RATE_HZ`** — 1 kHz gives 1 ms resolution. Drop to 100 Hz
+  for ultra-low-power if you can tolerate 10 ms granularity.
+- **`RTOS_USE_TIMESLICING`** — set to 0 if all your same-priority tasks
+  cooperate via `rtos_task_yield()`.
+- **`RTOS_USE_PREEMPTION`** — set to 0 for purely cooperative scheduling
+  (rare; you lose tick-driven preemption entirely).

@@ -1,0 +1,44 @@
+---
+title: Welcome
+description: A small, MISRA-aligned RTOS for AVR and ARM Cortex-M.
+icon: BookOpen
+---
+
+MicroRTOS is a real-time kernel for 8-bit AVR and ARM Cortex-M microcontrollers.
+It's small enough to fit in 3.5 KB of flash on an ATmega328P, modern enough to
+support EDF scheduling and tickless idle, and disciplined enough to align with
+MISRA C:2012.
+
+## Where to start
+
+<Cards>
+  <Card title="Get started" href="/docs/getting-started" description="Clone, build, and flash your first task to an Arduino Uno." />
+  <Card title="Concepts" href="/docs/concepts" description="The scheduler, sync primitives, IPC, memory pools, and timers — explained." />
+  <Card title="Examples" href="/docs/examples" description="11 runnable examples covering every major feature." />
+  <Card title="API reference" href="/docs/api" description="Function-level reference, organized by module." />
+  <Card title="Performance" href="/docs/performance" description="Real numbers — flash, SRAM, and cycle costs on actual hardware." />
+  <Card title="Porting" href="/docs/porting" description="What it takes to add a new MCU port." />
+</Cards>
+
+## What makes it different
+
+- **Hardware-validated** — every release is flashed to an Uno and proven to
+  blink with `rtos_task_delay`. Not just "compiles clean."
+- **Pay-as-you-go features** — `RTOS_USE_*` flags gate every advanced module.
+  Disabled features cost zero bytes; the linker strips them.
+- **Single header** — `#include "rtos.h"` is the entire public surface.
+- **Static allocation** — no `malloc`. Every TCB and stack is `static uint8_t`
+  in your code, sized at compile time.
+- **Two ports today** — AVR (ATmega328P, ATmega2560, ATmega32U4) and
+  ARM Cortex-M (SAM3X8E, SAMD21). Adding a new port is ~500 lines.
+
+## What it doesn't do
+
+MicroRTOS is a kernel, not a full BSP. It does not include:
+
+- Device drivers (UART, SPI, I²C, ADC) — you bring your own.
+- A filesystem or network stack.
+- Dynamic loading or multi-process isolation.
+
+If you need those, look at Zephyr or NuttX. If you want a small, predictable
+scheduler you can fully understand in an afternoon, you're in the right place.

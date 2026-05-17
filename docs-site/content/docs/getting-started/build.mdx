@@ -1,0 +1,83 @@
+---
+title: Build the library
+description: Compile MicroRTOS and the bundled examples with one command.
+---
+
+The Makefile is the only build system. There's no CMake, no Bazel — just
+`make`. Targets are organized by what they do, not what they output, so the
+flow stays predictable.
+
+## First build
+
+```bash
+git clone https://github.com/sitharaj88/rtos
+cd rtos
+make all
+```
+
+`make all` produces `build/librtos.a` (~21 KB raw archive, but the linker
+strips everything you don't use). You'll see something like:
+
+```
+Build complete!
+   text   data    bss   filename
+    929      0      0   rtos_list.o
+   2280      0      0   rtos_task.o
+   ...
+```
+
+## All the targets
+
+<TypeTable
+  type={{
+    all: { type: 'target', description: 'Build librtos.a (default release config)' },
+    examples: { type: 'target', description: 'Build all 11 examples' },
+    'example<N>': { type: 'target', description: 'Build one example (e.g. example10)' },
+    flash: { type: 'target', description: 'make flash EXAMPLE=N — build + flash example N' },
+    clean: { type: 'target', description: 'Remove build/' },
+    test: { type: 'target', description: 'Build and run 79 host unit tests' },
+    check: { type: 'target', description: 'Syntax-check every source under default config' },
+    'check-features': { type: 'target', description: 'Syntax-check with each advanced flag enabled' },
+    'check-arm': { type: 'target', description: 'Syntax-check the ARM port (needs arm-none-eabi-gcc)' },
+    debug: { type: 'target', description: 'Build with -Og -g3 and asserts enabled' },
+    strict: { type: 'target', description: 'Build with the MISRA-grade warning set' },
+  }}
+/>
+
+## Build configurations
+
+The Makefile has three CFLAGS sets you can switch between with target name:
+
+| Target | Optimization | Warnings | Asserts | Use for |
+|---|---|---|---|---|
+| `make all` (release) | `-Os` | `-w` (none) | off | Production firmware |
+| `make debug` | `-Og -g3` | default | **on** | GDB sessions, dev work |
+| `make strict` | `-O2 -g` | full MISRA set | on | Compliance review |
+
+`make strict` deliberately enables noisy warnings (`-Wconversion`,
+`-Wshadow`, `-Wcast-align`, etc.) and logs every one to
+`build/warnings.log`. Use it before releases.
+
+## Verifying a build
+
+```bash
+make test            # 79 host unit tests — list / mempool / queue
+make check           # syntax check, default config
+make check-features  # syntax check, each advanced feature enabled
+```
+
+All three should print "passed" with no warnings or errors.
+
+## Cleaning
+
+```bash
+make clean
+```
+
+Removes the `build/` directory entirely. Sources and the Makefile are
+untouched.
+
+## Next
+
+Continue to [Flash](/docs/getting-started/flash) to load firmware onto a
+real board.

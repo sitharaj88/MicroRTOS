@@ -1,0 +1,92 @@
+---
+title: Software timers
+description: One-shot and periodic timers without burning a task.
+---
+
+A software timer runs your callback after a delay, optionally repeating.
+The kernel keeps a sorted list of active timers and walks it on each
+tick — O(active timers) per tick, but typically that's a handful.
+
+## Setup
+
+```c
+static rtos_timer_t periodic;
+
+void on_tick(rtos_timer_t *t) {
+    /* Called from the timer task's context */
+    blink_led();
+}
+
+void init(void) {
+    rtos_timer_init(&periodic, "blink", on_tick,
+                    /* period */ RTOS_MS_TO_TICKS(500),
+                    /* auto-reload */ true);
+    rtos_timer_start(&periodic);
+}
+```
+
+## One-shot vs periodic
+
+```c
+/* One-shot: fires once, then stops */
+rtos_timer_init(&t, "once", cb, RTOS_MS_TO_TICKS(1000), /* auto-reload */ false);
+
+/* Periodic: fires every period */
+rtos_timer_init(&t, "tick", cb, RTOS_MS_TO_TICKS(100), /* auto-reload */ true);
+```
+
+Set the third boolean to control reload behavior.
+
+## Controlling timers
+
+```c
+rtos_timer_start(&t);                         /* arm or rearm */
+rtos_timer_stop(&t);                          /* disarm */
+rtos_timer_change_period(&t, new_period);     /* adjust */
+rtos_timer_reset(&t);                         /* restart countdown from now */
+bool active = rtos_timer_is_active(&t);
+```
+
+## The timer task
+
+Callbacks don't run in the ISR. They run in a dedicated **timer task**
+that the kernel creates on `rtos_kernel_init()`. The ISR just decrements
+counters and signals the task — keeping ISR time minimal.
+
+This means:
+
+- Your callback can call any kernel API (it's a normal task context).
+- Callback latency depends on the timer task's priority. Default is 1
+  (just below the absolute highest) — adjust with
+  `RTOS_TIMER_TASK_PRIORITY`.
+
+```c
+/* In rtos_config.h */
+#define RTOS_TIMER_TASK_PRIORITY    1
+#define RTOS_TIMER_TASK_STACK_SIZE  96
+```
+
+## Many timers, one task
+
+The timer task processes a sorted list, so any number of timers share
+the same task. Callbacks run sequentially in due-time order. If two
+timers are due at the same tick, they run back-to-back.
+
+## Cost
+
+Per timer: ~16 bytes of state plus a `rtos_list_node_t` (12 B on AVR).
+The timer task itself costs one TCB + its stack — typically 96 B on AVR.
+
+## Use cases
+
+- **Heartbeats** — periodic system check
+- **Debouncing** — one-shot started on first button edge
+- **Timeouts** — start a one-shot, cancel if the expected event arrives
+- **Soft watchdogs** — periodic timer resets a counter another task
+  watches
+
+## Limits
+
+- Resolution is the tick rate (1 ms default). Don't use for sub-tick
+  timing — use a hardware timer directly.
+- A long callback delays subsequent timer callbacks. Keep them small.

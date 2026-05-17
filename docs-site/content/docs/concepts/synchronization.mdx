@@ -1,0 +1,139 @@
+---
+title: Synchronization
+description: Mutexes with priority inheritance, semaphores, event groups.
+---
+
+Three primitives, three jobs. Pick the right one and the rest of your
+code stays simple.
+
+| Primitive | Use it when |
+|---|---|
+| **Mutex** | Protecting a shared resource (a peripheral, a data structure) |
+| **Semaphore** | Signaling between tasks or from an ISR — "something happened" |
+| **Event group** | Waiting on multiple conditions at once (any-of / all-of) |
+
+## Mutexes
+
+Mutexes are recursive (a task can lock its own mutex N times) and
+implement **priority inheritance** to prevent unbounded priority
+inversion.
+
+```c
+static rtos_mutex_t spi_mutex;
+
+void init(void) {
+    rtos_mutex_init(&spi_mutex);
+}
+
+void talk_to_sensor(void) {
+    rtos_mutex_lock(&spi_mutex, RTOS_WAIT_FOREVER);
+    /* ... transact on SPI ... */
+    rtos_mutex_unlock(&spi_mutex);
+}
+```
+
+### Priority inheritance
+
+Without PI, a classic problem: low-priority task L holds a mutex, a
+high-priority task H wants it and blocks, a medium-priority task M
+preempts L (and stays running because H is blocked). H is now waiting
+on M, indirectly — unbounded inversion.
+
+With PI, when H blocks on L's mutex, L is **temporarily boosted** to
+H's priority. M can no longer preempt L. When L releases, L returns to
+its base priority and H runs.
+
+The kernel does this for you. Just lock the mutex.
+
+### Non-blocking variants
+
+```c
+rtos_mutex_lock(&m, 0);                  /* try-lock, return immediately */
+rtos_mutex_lock(&m, RTOS_MS_TO_TICKS(50)); /* lock with 50 ms timeout */
+```
+
+## Semaphores
+
+Binary and counting both supported. A semaphore is just a counter that
+tasks can block on:
+
+```c
+static rtos_sem_t data_ready;
+
+void init(void) {
+    rtos_sem_init(&data_ready, /* max */ 1, /* initial */ 0);
+}
+
+/* In an ISR */
+void uart_rx_isr(void) {
+    rtos_sem_give_from_isr(&data_ready, NULL);
+}
+
+/* In a task */
+void rx_task(void *arg) {
+    while (1) {
+        rtos_sem_take(&data_ready, RTOS_WAIT_FOREVER);
+        process_received_bytes();
+    }
+}
+```
+
+Counting semaphores (`max > 1`) work the same way — useful for managing
+pools of resources.
+
+<Callout type="info">
+**ISR-safe variants** end in `_from_isr`. Always use these from interrupt
+context — they skip the critical-section bookkeeping that the regular
+variants do.
+</Callout>
+
+## Event groups
+
+An event group is a 32-bit (or 16-bit on AVR) bitmap. Tasks can set,
+clear, and wait on any subset of bits:
+
+```c
+#define EVT_BUTTON   (1U << 0)
+#define EVT_TIMEOUT  (1U << 1)
+#define EVT_DATA     (1U << 2)
+
+static rtos_event_t events;
+
+rtos_event_init(&events);
+
+/* Wait for ANY of the bits */
+uint32_t fired = rtos_event_wait(&events,
+                                  EVT_BUTTON | EVT_DATA,
+                                  /* wait_all  */ false,
+                                  /* clear_on_exit */ true,
+                                  /* timeout */ RTOS_WAIT_FOREVER);
+
+if (fired & EVT_BUTTON) { /* button pressed */ }
+if (fired & EVT_DATA)   { /* data arrived */  }
+```
+
+Or wait for **all** bits to be set:
+
+```c
+rtos_event_wait(&events, EVT_BUTTON | EVT_DATA, /* wait_all */ true, ...);
+```
+
+Event groups are the cleanest way to express "wake me when X _or_ Y
+happens" without juggling multiple semaphores.
+
+## When NOT to use these
+
+For a single producer / single consumer high-throughput pipeline, use a
+**queue** instead — it's lower overhead because there's no separate
+synchronization to track ownership. See [IPC](/docs/concepts/ipc).
+
+For truly tiny ISR → task signaling without ordering or data, **task
+notifications** are even lighter than semaphores:
+
+```c
+rtos_task_notify(&task_tcb);          /* from ISR */
+rtos_task_wait_notification(RTOS_WAIT_FOREVER); /* from task */
+```
+
+Notifications cost zero bytes per task if you enable
+`RTOS_USE_TASK_NOTIFICATIONS=1` — they reuse a field already in the TCB.

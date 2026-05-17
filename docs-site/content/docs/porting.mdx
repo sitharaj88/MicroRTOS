@@ -1,0 +1,190 @@
+---
+title: Porting
+description: What it takes to add a new MCU.
+icon: Workflow
+---
+
+A port is one C file plus a handful of conditional defines. Typically
+500 lines, mostly mechanical. Two ports ship today: AVR and ARM Cortex-M;
+this guide walks through what the port layer must do.
+
+## What the port owns
+
+The kernel is platform-agnostic except for one ~12-function interface
+defined in `include/rtos_port.h`. Implement that interface and you
+have a port.
+
+| Function | What it does |
+|---|---|
+| `rtos_port_init` | Configure the tick timer; disable interrupts |
+| `rtos_port_start_scheduler` | Restore the first task's context and `reti` |
+| `rtos_port_yield` | Save current context, switch task, restore |
+| `rtos_port_init_task_stack` | Build a fake interrupt frame for a new task |
+| `rtos_port_enter_critical` | Disable interrupts with nesting |
+| `rtos_port_exit_critical` | Re-enable when nesting hits zero |
+| `rtos_port_disable_interrupts` | Disable, return prior state |
+| `rtos_port_restore_interrupts` | Restore prior state |
+| `rtos_port_is_in_isr` | Tell the kernel which context we're in |
+| `rtos_port_check_stack_overflow` | Check SP vs base + canary at base |
+| `ISR(timer_vector)` | The tick ISR — save/restore + tick_handler |
+
+## File layout
+
+```
+src/port/<your-target>/rtos_port_<target>.c
+```
+
+Look at `src/port/avr/rtos_port_avr.c` (760 lines) and
+`src/port/arm/rtos_port_arm.c` (590 lines) for working references.
+
+## The three things you must get right
+
+### 1. The fake interrupt frame
+
+`rtos_port_init_task_stack` lays down bytes on a new task's stack so
+that the very first `RESTORE_CONTEXT + reti` jumps cleanly into the
+task entry function.
+
+What goes on the stack must match exactly what the ISR `RESTORE_CONTEXT`
+expects. The byte order matters — especially for the PC, which the
+hardware push and `reti` pop use a specific convention for.
+
+On AVR, the hardware pushes PCL first (high address), then PCH (low
+address). `reti` reads PCH from the low address first, PCL second. So
+in the fake frame, **PCL goes at the high address, PCH at the next
+lower one**.
+
+```c
+*sp-- = (uint8_t)(entry & 0xFF);    /* PCL — highest addr */
+*sp-- = (uint8_t)(entry >> 8);      /* PCH */
+*sp-- = 0x00;                        /* r0 */
+*sp-- = 0x80;                        /* SREG with I=1 */
+*sp-- = 0x00;                        /* r1 (must be zero per ABI) */
+/* r2..r31 = 0 (with r24:r25 = arg if ABI passes args there) */
+```
+
+The Cortex-M frame is different (stacks 8 registers via hardware), see
+the ARM port for details.
+
+### 2. Context save/restore and SREG
+
+On AVR, the I bit is cleared by hardware on ISR entry. If you save
+SREG inside the ISR, the saved I bit is **0**. When you later restore
+a task that was last preempted by that ISR, you must arrange for `reti`
+(not plain `ret`) so the I bit is set on the way back out.
+
+The kernel's `rtos_port_yield` exits with explicit `reti` for exactly
+this reason — see the AVR port. Missing that detail manifests as
+"first task runs, second resume hangs because interrupts are off."
+
+### 3. Tick timer setup
+
+Pick a timer that:
+
+- Can produce a stable `RTOS_TICK_RATE_HZ` rate (default 1 kHz)
+- Doesn't conflict with peripherals you need
+- Has an interrupt vector you can claim
+
+On ATmega328P we use Timer0 in CTC mode with prescaler 64 and OCR0A=249
+(16 MHz / 64 / 250 = 1 kHz).
+
+On Cortex-M we use SysTick — it's literally designed for this.
+
+## Step-by-step recipe
+
+<Steps>
+  <Step>
+    **Copy a similar port.** Cortex-M? Start from `rtos_port_arm.c`.
+    Microchip 32-bit? Start from `rtos_port_avr.c` (closer in spirit
+    than Cortex-M because both have explicit context save/restore).
+  </Step>
+  <Step>
+    **Update register save/restore macros** to match your target's
+    register set and ABI. Document carefully which registers are
+    callee-saved and which the ISR clobbers.
+  </Step>
+  <Step>
+    **Configure the tick timer** in `rtos_port_init`. Test by toggling
+    a pin from the ISR — get a stable 1 kHz square wave before
+    anything else.
+  </Step>
+  <Step>
+    **Write `rtos_port_init_task_stack`** to lay down a fake frame.
+    Verify by single-stepping through `rtos_port_start_scheduler` →
+    `RESTORE_CONTEXT` → `reti` and watching PC land at the right spot.
+  </Step>
+  <Step>
+    **Implement critical sections** (disable/restore interrupts with
+    nesting). Easy to get wrong — make sure nested enter/exit balances
+    and the bottom-out enables interrupts.
+  </Step>
+  <Step>
+    **Run the bring-up staircase:**
+    - Flash example 00 (bare-metal): toolchain works.
+    - Flash example 09 (RTOS busy-wait): scheduler can start a task.
+    - Flash example 10 (RTOS + task_delay): tick + delay + wake work
+      end-to-end.
+  </Step>
+  <Step>
+    **Add a Makefile target.** Update `CORE_SRCS` to include your port
+    file, conditional on a platform macro:
+
+    ```make
+    ifeq ($(PLATFORM),mytarget)
+      CORE_SRCS += src/port/mytarget/rtos_port_mytarget.c
+    endif
+    ```
+  </Step>
+  <Step>
+    **Run `make check-features` with your target's CC** to verify
+    every advanced feature still compiles on your platform.
+  </Step>
+</Steps>
+
+## Bring-up debug staircase
+
+When a new port hangs, run these in order. The first thing that doesn't
+do what you expect localizes the bug.
+
+| Example | If it doesn't work, suspect |
+|---|---|
+| 00 bare-metal | Toolchain, linker script, fuses |
+| 09 RTOS busy-wait | `start_scheduler`, stack init, first `reti` |
+| 10 RTOS + task_delay | Tick ISR, `tick_handler`, `process_delays`, second `reti` |
+| 01 multi-task | `switch_context` ready-list bookkeeping |
+| 02 mutex with PI | Priority boosting, mutex wait list |
+
+This is the exact sequence used to debug the original AVR port; it
+shrinks the search space by a factor of N per step.
+
+## Common port bugs
+
+(All of these were real bugs in the AVR port at some point.)
+
+| Symptom | Likely cause |
+|---|---|
+| LED never lights | First `reti` jumps to wrong PC — byte order off in fake frame |
+| LED lights once, stays on | `task_delay` doesn't wake; tick ISR not firing |
+| LED blinks once, stops | `port_yield` returning with I bit cleared (use `reti`, not `ret`) |
+| Random crashes after minutes | Stack overflow into another task's TCB or kernel state |
+| Works for one task, hangs with two | Ready list not properly updated on preemption |
+
+See the bring-up section of the project README for the full debugging
+narrative.
+
+## Multi-core (SMP)
+
+The SMP scaffolding is in `src/core/rtos_smp.c` but needs three
+platform-specific functions per target:
+
+```c
+void     rtos_port_smp_start_core(uint8_t core_id,
+                                   void (*entry)(void),
+                                   void *stack);
+uint8_t  rtos_port_smp_get_core_id(void);
+void     rtos_port_smp_send_ipi(uint8_t core_id, rtos_ipi_type_t type);
+```
+
+Plus per-core tick handling and IPI vectors. RP2040 is the easiest first
+target (clean documentation, simple multi-core API). Once any port has
+these, `RTOS_USE_SMP=1` works for that target.

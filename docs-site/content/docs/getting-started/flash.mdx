@@ -1,0 +1,115 @@
+---
+title: Flash to a board
+description: Build and program an Arduino Uno in one command.
+---
+
+The `flash` target wraps `avr-objcopy` + `avrdude` so you can go from
+source to running code without thinking about intermediate steps.
+
+## Quick start
+
+Plug an Arduino Uno into USB, then:
+
+```bash
+make flash EXAMPLE=10
+```
+
+Expected output:
+
+```
+Compiling: src/core/rtos_list.c
+...
+Example 10 built successfully!
+Generating Intel HEX: build/examples/example10.hex
+   text   data    bss     dec     hex  filename
+   3560     60    464    4084     ff4  build/examples/example10.elf
+Flashing build/examples/example10.hex to /dev/ttyACM0...
+avrdude: writing flash (3624 bytes):
+Writing | ################################################## | 100% 0.62s
+3624 bytes of flash verified
+avrdude done.  Thank you.
+```
+
+The pin-13 LED should immediately start blinking at 1 Hz.
+
+## Choosing an example and port
+
+```bash
+make flash EXAMPLE=1                  # multi-task demo (pin 12 + pin 13)
+make flash EXAMPLE=4                  # timer + event group
+make flash EXAMPLE=10 PORT=/dev/ttyACM1   # if not /dev/ttyACM0
+```
+
+| `EXAMPLE` | Description |
+|---|---|
+| 0 | Bare-metal blink (no RTOS — sanity check) |
+| 1 | Two tasks blinking different LEDs at different rates |
+| 2 | Mutex demo with priority inheritance |
+| 3 | Producer/consumer with a queue |
+| 4 | Software timers + event groups |
+| 5 | Tickless low-power demo |
+| 7 | Async/await coroutine pattern |
+| 8 | EDF deadline scheduling |
+| 9 | RTOS busy-wait blink (no `task_delay`) |
+| 10 | Single task using `rtos_task_delay` |
+| 11 | Faster blink for counting cycles |
+
+## Common errors
+
+### `Permission denied` on `/dev/ttyACM0`
+
+You're not in the `dialout` group. Fix it once:
+
+```bash
+sudo usermod -aG dialout $USER
+```
+
+Then **log out and back in** for the change to take effect.
+
+### `/dev/ttyACM0 not found`
+
+The Uno isn't enumerated. Check:
+
+```bash
+ls /dev/ttyACM* /dev/ttyUSB*
+```
+
+If nothing shows up, try a different USB cable (some are charge-only) or a
+different USB port. On some Linux distros, `ModemManager` briefly grabs
+new serial devices on plug-in; if that's interfering, disable it:
+
+```bash
+sudo systemctl mask ModemManager
+```
+
+### `avrdude` says `programmer is not responding`
+
+The board may be in an odd state from a previous program. Press the reset
+button just as `avrdude` starts, or unplug + replug the USB cable.
+
+### LED doesn't blink
+
+If example 10 doesn't blink:
+
+1. First flash example 0 (`make flash EXAMPLE=0`). It's bare-metal — no
+   RTOS. If that blinks, your hardware and toolchain are fine.
+2. Then flash example 9 (RTOS, busy-wait). If that blinks, the scheduler
+   works but `task_delay` doesn't.
+3. Then flash example 10 (RTOS + `task_delay`). If only this fails, you
+   likely have a tick-handler issue.
+
+This staircase is exactly how the RTOS was debugged during initial bring-up.
+
+## Verifying the flash
+
+`make flash` already verifies after writing (avrdude `-D -U flash:w:...:i`
+re-reads the flash and compares). If you want to verify without rewriting:
+
+```bash
+make flash-verify EXAMPLE=10
+```
+
+## Next
+
+Continue to [First blink](/docs/getting-started/first-blink) for a
+line-by-line walk through the code that's now running on your Uno.

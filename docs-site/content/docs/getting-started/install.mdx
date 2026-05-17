@@ -1,0 +1,89 @@
+---
+title: Install prerequisites
+description: Set up avr-gcc, make, and avrdude on your machine.
+---
+
+MicroRTOS builds with a plain C toolchain plus `make`. There is no IDE
+dependency — you can use whatever editor you like.
+
+## Required tools
+
+<TypeTable
+  type={{
+    'avr-gcc': { type: '>= 7.3', description: 'C compiler for AVR targets (ATmega328P, etc.)' },
+    'avr-libc': { type: 'any', description: 'Standard C library for AVR' },
+    avrdude: { type: '>= 6.x', description: 'Flashes the .hex to your board' },
+    make: { type: 'GNU make', description: 'Drives the build' },
+  }}
+/>
+
+## Linux (Ubuntu / Debian)
+
+```bash
+sudo apt install gcc-avr avr-libc avrdude make
+```
+
+If you also want to build the ARM port (`make check-arm`):
+
+```bash
+sudo apt install gcc-arm-none-eabi
+```
+
+To flash without sudo, add yourself to the `dialout` group, then log out
+and back in:
+
+```bash
+sudo usermod -aG dialout $USER
+```
+
+## macOS
+
+Using Homebrew:
+
+```bash
+brew tap osx-cross/avr
+brew install avr-gcc avrdude make
+```
+
+For ARM:
+
+```bash
+brew install --cask gcc-arm-embedded
+```
+
+## Windows
+
+Easiest path: install the [Arduino IDE](https://www.arduino.cc/en/software).
+It bundles avr-gcc, avr-libc, and avrdude at known paths. Then run the
+MicroRTOS Makefile from a WSL shell or Git Bash, pointing `ARDUINO_PATH`
+at your install:
+
+```bash
+make ARDUINO_PATH=/c/Users/<you>/AppData/Local/Arduino15/packages/arduino
+```
+
+## Verify
+
+```bash
+avr-gcc --version
+avrdude -v 2>&1 | head -1
+make --version | head -1
+```
+
+You should see something like:
+
+```
+avr-gcc (GCC) 7.3.0
+avrdude version 8.0
+GNU Make 4.x
+```
+
+<Callout type="info">
+If you used the Arduino IDE to install the toolchain, the Makefile already
+knows to look under `~/.arduino15/packages/arduino/tools/`. No environment
+variables needed.
+</Callout>
+
+## Next
+
+Continue to [Build](/docs/getting-started/build) to compile the library.

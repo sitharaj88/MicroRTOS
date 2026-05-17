@@ -1,0 +1,93 @@
+---
+title: Semaphore
+description: Binary and counting semaphores.
+---
+
+Enabled by `RTOS_USE_SEMAPHORES=1` (default).
+
+## `rtos_sem_init`
+
+```c
+void rtos_sem_init(rtos_sem_t *sem, uint32_t max_count, uint32_t initial);
+```
+
+| Argument | Meaning |
+|---|---|
+| `max_count` | Maximum count. `1` = binary semaphore. |
+| `initial` | Starting count (`0..max_count`). |
+
+## `rtos_sem_take`
+
+```c
+rtos_status_t rtos_sem_take(rtos_sem_t *sem, uint32_t timeout);
+```
+
+Decrements the counter, blocking up to `timeout` ticks if the counter
+is zero. Returns `RTOS_OK` or `RTOS_ERR_TIMEOUT`.
+
+## `rtos_sem_give`
+
+```c
+rtos_status_t rtos_sem_give(rtos_sem_t *sem);
+```
+
+Increments the counter. Wakes the highest-priority waiter (if any).
+Returns `RTOS_ERR_FULL` if already at `max_count`.
+
+## `rtos_sem_give_from_isr`
+
+```c
+rtos_status_t rtos_sem_give_from_isr(rtos_sem_t *sem, bool *yield_required);
+```
+
+ISR-safe. If `*yield_required` is set on return, request a context
+switch from the ISR's exit path.
+
+## `rtos_sem_get_count`
+
+```c
+uint32_t rtos_sem_get_count(rtos_sem_t *sem);
+```
+
+Snapshot of the current count.
+
+## Pattern: ISR-to-task signaling
+
+```c
+static rtos_sem_t rx_ready;
+
+void init(void) {
+    rtos_sem_init(&rx_ready, /* max */ 1, /* initial */ 0);
+}
+
+void uart_rx_isr(void) {
+    bool yield;
+    rtos_sem_give_from_isr(&rx_ready, &yield);
+    /* port-specific: trigger context switch if yield is true */
+}
+
+void rx_task(void *arg) {
+    while (1) {
+        rtos_sem_take(&rx_ready, RTOS_WAIT_FOREVER);
+        consume_rx_buffer();
+    }
+}
+```
+
+## Pattern: resource pool
+
+```c
+static rtos_sem_t slots;  /* counting */
+
+void init(void) {
+    rtos_sem_init(&slots, /* max */ 4, /* initial */ 4);
+}
+
+void use_slot(void) {
+    rtos_sem_take(&slots, RTOS_WAIT_FOREVER);   /* wait for a slot */
+    do_work();
+    rtos_sem_give(&slots);                       /* release */
+}
+```
+
+The counter caps concurrent users at 4.

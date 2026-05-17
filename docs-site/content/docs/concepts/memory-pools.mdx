@@ -1,0 +1,102 @@
+---
+title: Memory pools
+description: O(1) deterministic allocation without fragmentation.
+---
+
+The kernel never calls `malloc`. Period. If you need dynamic-looking
+allocation, use a memory pool — a fixed array of fixed-size blocks with
+an internal free list.
+
+## How it works
+
+```
+┌──────────────────────────────────────────┐
+│ block 0 │ block 1 │ block 2 │ ... │ block N-1│
+└──────────────────────────────────────────┘
+   free_list ──► block 2 ──► block 0 ──► block 7 ──► NULL
+```
+
+Each free block contains a pointer to the next free block. Allocation
+pops from the front of the free list; freeing pushes back. Both are
+single-instruction sequences in practice — O(1) worst-case.
+
+There's **no fragmentation** because every block is the same size. There's
+no metadata overhead because the free-list pointer lives inside the block
+when it's free, and is overwritten by user data when it's allocated.
+
+## Setup
+
+```c
+#define BLOCK_SIZE   32
+#define BLOCK_COUNT  16
+
+static uint8_t        pool_memory[BLOCK_SIZE * BLOCK_COUNT];
+static rtos_mempool_t pool;
+
+void init(void) {
+    rtos_mempool_init(&pool, pool_memory, BLOCK_SIZE, BLOCK_COUNT);
+}
+```
+
+The block size must be at least `sizeof(void *)` (the free-list link).
+The kernel will round up if smaller.
+
+## Allocating and freeing
+
+```c
+void *block = rtos_mempool_alloc(&pool, RTOS_WAIT_FOREVER);
+/* Use the block */
+rtos_mempool_free(&pool, block);
+```
+
+If the pool is exhausted, `rtos_mempool_alloc` blocks until another task
+frees a block (or the timeout expires). Pass `RTOS_NO_WAIT` for
+non-blocking allocation that returns `NULL` immediately when empty.
+
+### ISR-safe variants
+
+```c
+void *b = rtos_mempool_alloc_from_isr(&pool);
+rtos_mempool_free_from_isr(&pool, b, &yield_required);
+```
+
+These never block. ISR alloc returns `NULL` if the pool is empty.
+
+## Querying
+
+```c
+uint16_t free  = rtos_mempool_available(&pool);
+uint16_t total = rtos_mempool_total(&pool);
+bool empty     = rtos_mempool_is_empty(&pool);
+```
+
+Use these to plan back-pressure logic.
+
+## Sizing
+
+Pick block size to match your largest message. Pick block count to match
+your worst-case in-flight depth. If you're queueing 8 buffers at a time
+plus 2 in-flight in DMA, allocate 10 blocks.
+
+A 16-block pool of 32-byte blocks costs:
+
+- 512 B for the data
+- 32 B for the `rtos_mempool_t` struct
+- 0 B of free-list metadata (lives inside free blocks)
+
+That's it. Compare to `malloc`'s typical 16-byte header per allocation
+plus coalescing logic.
+
+## Use cases
+
+- **Zero-copy message buffers** — sized to your largest message.
+- **Variable-size records** — pick a bucket size; pay a small amount of
+  waste for predictable timing.
+- **Per-task scratch space** — allocate at task start, free at end.
+- **DMA buffers** — fixed pool, hand pointers to the DMA engine.
+
+## What it's not
+
+A general-purpose allocator. If you genuinely need variable-size
+allocation with merge/split (rare in embedded), you'd reach for a TLSF
+allocator or `heap_4` style. The kernel doesn't ship one — by design.

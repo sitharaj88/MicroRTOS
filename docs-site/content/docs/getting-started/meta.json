@@ -1,0 +1,10 @@
+{
+  "title": "Get started",
+  "pages": [
+    "index",
+    "install",
+    "build",
+    "flash",
+    "first-blink"
+  ]
+}

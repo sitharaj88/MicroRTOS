@@ -1,0 +1,153 @@
+---
+title: Examples
+description: Eleven runnable examples covering every feature.
+icon: BookCheck
+---
+
+Every example lives under `examples/NN_name/main.c` and builds with
+`make exampleN`. Most are sized for an Arduino Uno (ATmega328P).
+
+Use `make flash EXAMPLE=N` to build and flash in one step.
+
+## 00 · Bare-metal blink
+
+**Path:** `examples/00_blink_baremetal/main.c` · **Flash:** `~162 B`
+
+No RTOS. Direct AVR I/O with `_delay_ms`. Used as a sanity check that
+the build and flash workflow are healthy independent of the kernel.
+
+```c
+DDRB |= (1 << PB5);
+while (1) {
+    PORTB ^= (1 << PB5);
+    _delay_ms(500);
+}
+```
+
+If this doesn't blink, your toolchain or wiring is broken — fix that
+before debugging RTOS examples.
+
+## 01 · Basic tasks
+
+**Path:** `examples/01_basic_tasks/main.c` · **Flash:** `~3.6 KB` ·
+**SRAM:** `~641 B`
+
+Two tasks at different priorities, each blinking a different LED at a
+different rate. The simplest demonstration that the scheduler is
+preempting correctly.
+
+- Task 1 (priority 2): toggles pin 13, 500 ms cycle
+- Task 2 (priority 1, higher): toggles pin 12, 250 ms cycle
+
+## 02 · Mutex demo
+
+**Path:** `examples/02_mutex_demo/main.c` · **Flash:** `~5.7 KB`
+
+Three tasks share a mutex-protected resource. Demonstrates priority
+inheritance: when a high-priority task blocks on a mutex held by a
+low-priority task, the low task is temporarily boosted to prevent
+medium-priority tasks from starving the high-priority one.
+
+## 03 · Producer / consumer
+
+**Path:** `examples/03_producer_consumer/main.c` · **Flash:** `~6.4 KB`
+
+A producer task pushes events into a queue at one rate; a consumer
+drains them at another. Demonstrates `rtos_queue_send` / `_receive` and
+back-pressure when the queue fills.
+
+## 04 · Timer + event group
+
+**Path:** `examples/04_timer_events/main.c` · **Flash:** `~5.4 KB` ·
+**SRAM:** `~1.3 KB`
+
+Three tasks coordinate via an event group, driven by both periodic and
+one-shot software timers. Shows `rtos_event_wait` with `wait_all` /
+`wait_any` and how timers interact with event groups.
+
+## 05 · Tickless low power
+
+**Path:** `examples/05_tickless_low_power/main.c` · **Flash:** `~3.8 KB`
+
+A sensor task wakes every 5 seconds. Between wakes, the kernel enters
+`POWER_DOWN` sleep mode with the tick suppressed. Demonstrates the
+40× current-draw improvement vs constant ticking.
+
+Requires `RTOS_USE_TICKLESS_IDLE=1`.
+
+## 06 · SMP dual core (placeholder)
+
+**Path:** `examples/06_smp_dual_core/README.md`
+
+Reserved for a Symmetric Multi-Processing demo on RP2040 or ESP32. The
+SMP module exists in the kernel but needs a multi-core port (see
+[Porting](/docs/porting)) before this example can run.
+
+## 07 · Async / await
+
+**Path:** `examples/07_async_await/main.c` · **Flash:** `~3.8 KB`
+
+Coroutine-style state machine inside one task — toggles LED through a
+four-step blink pattern using `ASYNC_BEGIN` / `ASYNC_DELAY_MS` macros.
+Useful when you want sequential logic without a full TCB per state.
+
+## 08 · EDF deadline
+
+**Path:** `examples/08_edf_deadline/main.c` · **Flash:** `~5.0 KB`
+
+Two periodic tasks registered with the EDF scheduler:
+
+- Fast: 50 ms period, 40 ms deadline, 5 ms WCET
+- Slow: 200 ms period, 200 ms deadline, 20 ms WCET
+
+Demonstrates `rtos_deadline_task_create` and `rtos_deadline_job_complete`,
+plus admission control.
+
+Requires `RTOS_USE_EDF_SCHEDULER=1`. Built automatically by
+`make example8`.
+
+## 09 · RTOS busy-wait blink
+
+**Path:** `examples/09_blink_busywait/main.c` · **Flash:** `~3.2 KB`
+
+One RTOS task that toggles the LED in a busy loop — no
+`rtos_task_delay`. Created during bring-up to isolate the scheduler
+from the delay/wake path. If 09 blinks but 10 doesn't, the bug is in
+the delay/wake mechanism.
+
+## 10 · Single task + task_delay
+
+**Path:** `examples/10_blink_taskdelay/main.c` · **Flash:** `~3.5 KB`
+
+The minimum useful RTOS program — one task that yields via
+`rtos_task_delay`. The canonical "hello world" for the kernel and the
+example used by the Get Started walkthrough.
+
+See [First blink, explained](/docs/getting-started/first-blink) for a
+line-by-line walkthrough.
+
+## 11 · Diagnostic blink
+
+**Path:** `examples/11_diag_blink/main.c` · **Flash:** `~3.6 KB`
+
+Same shape as example 10 but with a 100 ms delay and an iteration
+counter. Used during bring-up to count how many cycles complete before
+any failure — at 100 ms cycles, a bug after the 50th iteration is much
+easier to characterize than a bug after the 5th.
+
+## Add your own
+
+The pattern:
+
+1. Create `examples/NN_your_name/main.c`.
+2. Add a target in the [Makefile](https://github.com/sitharaj88/rtos/blob/master/Makefile):
+
+```make
+exampleN: $(RTOS_LIB)
+    @$(CC) $(CFLAGS) examples/NN_your_name/main.c -o $(BUILD_DIR)/examples/exampleN.o
+    @$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/exampleN.o $(RTOS_LIB) \
+        -o $(BUILD_DIR)/examples/exampleN.elf
+    @$(SIZE) $(BUILD_DIR)/examples/exampleN.elf
+```
+
+3. `make flash EXAMPLE=N`. Done.

@@ -1,0 +1,109 @@
+---
+title: Event groups
+description: Wait on bit patterns — any-of or all-of.
+---
+
+Enabled by `RTOS_USE_EVENT_GROUPS=1` (default).
+
+## `rtos_event_init`
+
+```c
+void rtos_event_init(rtos_event_t *event);
+```
+
+## `rtos_event_set`
+
+```c
+uint32_t rtos_event_set(rtos_event_t *event, uint32_t bits);
+```
+
+Sets the given bits. Wakes any waiter whose condition is now satisfied.
+Returns the new bit value.
+
+## `rtos_event_clear`
+
+```c
+uint32_t rtos_event_clear(rtos_event_t *event, uint32_t bits);
+```
+
+Clears the given bits. Returns the new bit value.
+
+## `rtos_event_wait`
+
+```c
+uint32_t rtos_event_wait(rtos_event_t *event,
+                         uint32_t      wait_bits,
+                         bool          wait_all,
+                         bool          clear_on_exit,
+                         uint32_t      timeout);
+```
+
+Blocks until the condition is met or `timeout` ticks elapse.
+
+| Argument | Meaning |
+|---|---|
+| `wait_bits` | Bits to wait on |
+| `wait_all` | `false` = any of, `true` = all of |
+| `clear_on_exit` | If true, clear the matched bits before returning |
+| `timeout` | Max wait |
+
+Returns the bit pattern that satisfied the condition, or `0` on timeout.
+
+## `rtos_event_set_from_isr`
+
+```c
+uint32_t rtos_event_set_from_isr(rtos_event_t *event, uint32_t bits,
+                                  bool *yield_required);
+```
+
+ISR-safe variant.
+
+## `rtos_event_get`
+
+```c
+uint32_t rtos_event_get(rtos_event_t *event);
+```
+
+Snapshot of current bits without waiting or clearing.
+
+## Pattern: wait for any of several conditions
+
+```c
+#define EVT_BUTTON  (1U << 0)
+#define EVT_TIMEOUT (1U << 1)
+#define EVT_DATA    (1U << 2)
+
+static rtos_event_t events;
+
+void main_task(void *arg) {
+    while (1) {
+        uint32_t fired = rtos_event_wait(&events,
+                                          EVT_BUTTON | EVT_TIMEOUT | EVT_DATA,
+                                          /* wait_all */ false,
+                                          /* clear */ true,
+                                          RTOS_WAIT_FOREVER);
+        if (fired & EVT_BUTTON)  handle_button();
+        if (fired & EVT_TIMEOUT) handle_timeout();
+        if (fired & EVT_DATA)    handle_data();
+    }
+}
+```
+
+## Pattern: barrier (wait for all)
+
+```c
+#define WORKER_1_DONE (1U << 0)
+#define WORKER_2_DONE (1U << 1)
+#define WORKER_3_DONE (1U << 2)
+
+/* Master */
+rtos_event_wait(&events,
+                WORKER_1_DONE | WORKER_2_DONE | WORKER_3_DONE,
+                /* wait_all */ true,
+                /* clear */ true,
+                RTOS_WAIT_FOREVER);
+combine_results();
+```
+
+Each worker sets its bit when done; master proceeds only after all
+three.

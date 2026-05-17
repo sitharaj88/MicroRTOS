@@ -1,0 +1,68 @@
+---
+title: Tickless
+description: Long idle sleeps with the tick suppressed.
+---
+
+Enabled by `RTOS_USE_TICKLESS_IDLE=1`.
+
+## `rtos_tickless_init`
+
+```c
+void rtos_tickless_init(void);
+```
+
+Initializes tickless state. Call after `rtos_kernel_init` and before
+`rtos_kernel_start`.
+
+## `rtos_tickless_enable`
+
+```c
+void rtos_tickless_enable(bool enable);
+```
+
+Master switch. Disable to fall back to regular periodic ticking
+(useful for debugging timing-sensitive code).
+
+## `rtos_tickless_set_sleep_mode`
+
+```c
+typedef enum {
+    RTOS_SLEEP_IDLE,        /* CPU stops; peripherals run */
+    RTOS_SLEEP_ADC,
+    RTOS_SLEEP_STANDBY,
+    RTOS_SLEEP_POWER_DOWN,  /* deepest; external wake only */
+} rtos_sleep_mode_t;
+
+void rtos_tickless_set_sleep_mode(rtos_sleep_mode_t mode);
+```
+
+Pick the deepest sleep mode your wake sources support.
+
+## Hooks (`RTOS_USE_TICKLESS_HOOKS=1`)
+
+```c
+void rtos_tickless_pre_sleep_hook(uint32_t expected_ticks);
+void rtos_tickless_post_sleep_hook(uint32_t slept_ticks);
+```
+
+Implement to power-manage peripherals around each sleep cycle.
+
+## Statistics
+
+```c
+uint32_t rtos_tickless_get_sleep_count(void);
+uint32_t rtos_tickless_get_total_slept(void);
+```
+
+## Tunables
+
+```c
+#define RTOS_USE_TICKLESS_IDLE   1
+#define RTOS_TICKLESS_MIN_TICKS  2     /* don't go tickless for shorter sleeps */
+#define RTOS_TICKLESS_MAX_TICKS  1000  /* hardware timer ceiling */
+```
+
+## Example
+
+See [example 5](/docs/examples#05-tickless-low-power) and the
+[Tickless idle concept](/docs/concepts/tickless) for a full walkthrough.

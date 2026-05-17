@@ -1,0 +1,17 @@
+{
+  "title": "API Reference",
+  "pages": [
+    "index",
+    "kernel",
+    "tasks",
+    "mutex",
+    "semaphore",
+    "event",
+    "queue",
+    "mempool",
+    "timer",
+    "deadline",
+    "tickless",
+    "notifications"
+  ]
+}

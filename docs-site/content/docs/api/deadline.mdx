@@ -1,0 +1,123 @@
+---
+title: Deadline (EDF)
+description: Earliest Deadline First scheduling for hard real-time tasks.
+---
+
+Enabled by `RTOS_USE_EDF_SCHEDULER=1`. EDF tasks coexist with
+fixed-priority tasks.
+
+## `rtos_deadline_init`
+
+```c
+void rtos_deadline_init(void);
+```
+
+Initializes the EDF scheduler state. Call once after `rtos_kernel_init`.
+
+## `rtos_deadline_task_create`
+
+```c
+rtos_status_t rtos_deadline_task_create(rtos_tcb_t *tcb,
+                                         uint32_t    period_ms,
+                                         uint32_t    deadline_ms,
+                                         uint32_t    wcet_ms);
+```
+
+Registers an existing task with EDF parameters. Call after
+`rtos_task_create`.
+
+| Argument | Meaning |
+|---|---|
+| `period_ms` | Time between job releases |
+| `deadline_ms` | Relative deadline from job release (typically ≤ period) |
+| `wcet_ms` | Worst-case execution time per job |
+
+The kernel performs an admission test using the Liu-Layland bound; the
+call returns `RTOS_ERR_STATE` if adding the task would exceed
+schedulable utilization.
+
+## `rtos_deadline_job_complete`
+
+```c
+void rtos_deadline_job_complete(void);
+```
+
+Call at the end of each periodic iteration. Marks the current job done
+and schedules the next release.
+
+```c
+void edf_task(void *arg) {
+    while (1) {
+        do_work();
+        rtos_deadline_job_complete();
+    }
+}
+```
+
+## `rtos_deadline_set_miss_callback`
+
+```c
+typedef void (*rtos_deadline_miss_cb)(rtos_deadline_task_t *task);
+
+void rtos_deadline_set_miss_callback(rtos_tcb_t           *tcb,
+                                      rtos_deadline_miss_cb cb);
+```
+
+Sets a callback that fires when the task misses a deadline. Useful for
+logging and recovery.
+
+## `rtos_deadline_admission_test`
+
+```c
+bool rtos_deadline_admission_test(uint32_t period_ticks, uint32_t wcet_ticks);
+```
+
+Check if a new task would fit the schedule before calling
+`rtos_deadline_task_create`.
+
+## `rtos_deadline_exact_test`
+
+```c
+bool rtos_deadline_exact_test(uint32_t period_ticks,
+                               uint32_t deadline_ticks,
+                               uint32_t wcet_ticks);
+```
+
+More precise than the Liu-Layland bound, using processor demand
+analysis.
+
+## Statistics
+
+```c
+uint16_t rtos_deadline_get_miss_count(rtos_tcb_t *tcb);
+uint16_t rtos_deadline_get_job_count(rtos_tcb_t *tcb);
+int32_t  rtos_deadline_get_slack(rtos_tcb_t *tcb);
+uint8_t  rtos_deadline_get_utilization(void);     /* percent */
+```
+
+## Example
+
+```c
+static rtos_tcb_t  fast_tcb, slow_tcb;
+static uint8_t     fast_stack[160], slow_stack[160];
+
+void init(void) {
+    rtos_kernel_init();
+    rtos_deadline_init();
+
+    rtos_task_create(&fast_tcb, "fast", fast_task, NULL, 2,
+                     fast_stack, sizeof(fast_stack));
+    rtos_task_create(&slow_tcb, "slow", slow_task, NULL, 2,
+                     slow_stack, sizeof(slow_stack));
+
+    rtos_deadline_task_create(&fast_tcb,
+                              /* period   */ 50,
+                              /* deadline */ 40,
+                              /* wcet     */ 5);
+    rtos_deadline_task_create(&slow_tcb, 200, 200, 20);
+
+    rtos_kernel_start();
+}
+```
+
+See [example 8](/docs/examples#08-edf-deadline).

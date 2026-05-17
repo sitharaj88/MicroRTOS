@@ -1,0 +1,118 @@
+---
+title: Safety
+description: MISRA, stack overflow, watchdog, assertions.
+---
+
+Embedded code that matters needs to be defended in depth. MicroRTOS has
+four overlapping layers of safety, each tunable independently.
+
+## Stack overflow detection
+
+Every task stack is filled with `0xA5` on creation. The port's
+`rtos_port_check_stack_overflow()` runs on every context switch and
+checks:
+
+1. **SP vs base** — is the stack pointer below the stack's base
+   address?
+2. **Canary intact** — is the byte at `stack_base` still `0xA5`?
+
+If either fails, the kernel calls `rtos_stack_overflow_hook(tcb)`. The
+default hook disables interrupts and infinite-loops — your design will
+hang in a predictable way instead of corrupting memory and crashing
+later. Override the hook in your application to log + reset, blink an
+SOS pattern, or whatever fits your safety story.
+
+```c
+/* Enable */
+#define RTOS_CHECK_STACK_OVERFLOW   1   /* 1 = canary, 2 = full fill */
+
+/* Override the hook */
+void rtos_stack_overflow_hook(rtos_tcb_t *tcb) {
+    /* Log task name (if RTOS_USE_TASK_NAMES) and reset */
+    save_post_mortem(tcb->name);
+    while (1) wdt_reset();    /* let HW watchdog fire */
+}
+```
+
+Runtime cost: a handful of instructions per switch. Worth it.
+
+## Assertions
+
+`RTOS_ASSERT(expr)` checks invariants throughout the kernel. When
+enabled (`RTOS_USE_ASSERT=1`, default), failure calls
+`rtos_assert_failed(file, line)` which disables interrupts and
+loops.
+
+```c
+RTOS_ASSERT(tcb != NULL);
+RTOS_ASSERT(priority < RTOS_MAX_PRIORITIES);
+```
+
+Disable for size-constrained production builds by defining
+`RTOS_USE_ASSERT=0`. The release Makefile build does **not** disable it
+by default — measure before turning it off.
+
+## MISRA C:2012 alignment
+
+The kernel is written to MISRA C:2012 guidance. `make strict` builds
+with a curated warning set close to MISRA's mandatory rules:
+
+```
+-Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow
+-Wundef -Wcast-align -Wcast-qual -Wstrict-prototypes -Wmissing-prototypes
+-Wswitch-default -Wswitch-enum -Wunreachable-code -Wformat=2
+-Wdouble-promotion -Wnull-dereference -Wlogical-op
+-Wduplicated-cond -Wduplicated-branches -Wrestrict
+```
+
+Run `make strict` before releases. Warnings are logged to
+`build/warnings.log` for review.
+
+For full MISRA scanning, `make misra-check` invokes `cppcheck` with the
+MISRA addon if installed. See [MISRA compliance](https://github.com/sitharaj88/rtos/blob/master/docs/MISRA_COMPLIANCE.md)
+for the rule-by-rule status.
+
+## Watchdog support
+
+Two independent watchdog facilities:
+
+### Hardware watchdog (`RTOS_USE_WATCHDOG=1`)
+
+Wraps the AVR/ARM hardware watchdog. The kernel feeds it from the idle
+task. If a runaway task starves idle for too long, the chip resets.
+
+```c
+rtos_watchdog_init(/* timeout_ms */ 1000);
+rtos_watchdog_enable();
+```
+
+### Task watchdog (`RTOS_USE_TASK_WATCHDOG=1`)
+
+Per-task software watchdog. Each task that opts in must "check in" by
+some deadline:
+
+```c
+rtos_task_wdt_register(&my_tcb, RTOS_MS_TO_TICKS(500));
+
+while (1) {
+    do_work();
+    rtos_task_wdt_kick(&my_tcb);    /* "I'm alive" */
+}
+```
+
+A task that misses its deadline calls a configurable handler — by
+default it logs and continues; you can change to reset or recover.
+
+## Defense-in-depth recommendation
+
+For production firmware that matters:
+
+1. **Stack canaries always on** (`RTOS_CHECK_STACK_OVERFLOW=1`).
+2. **Asserts on** in development; profile their impact before disabling.
+3. **`make strict`** as part of CI; treat new warnings as bugs.
+4. **Hardware watchdog** for catastrophic recovery.
+5. **Task watchdog** for high-priority real-time tasks.
+6. **Static analyzer** in CI (`make analyze` with gcc-10+, or pclint).
+
+You'll catch most bugs at compile time, the rest at first activation,
+and the survivors will fail in a controlled way.

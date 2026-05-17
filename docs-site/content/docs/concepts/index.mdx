@@ -1,0 +1,20 @@
+---
+title: Concepts
+description: How MicroRTOS works under the hood.
+icon: BookOpen
+---
+
+The kernel is small enough to read end-to-end in a couple of hours. This
+section gives you the mental model first, then the details.
+
+<Cards>
+  <Card title="Architecture" href="/docs/concepts/architecture" description="The big picture — files, layers, what depends on what." />
+  <Card title="Scheduler" href="/docs/concepts/scheduler" description="Priority + EDF, ready lists, context switching." />
+  <Card title="Tasks" href="/docs/concepts/tasks" description="TCBs, stacks, states, the task lifecycle." />
+  <Card title="Synchronization" href="/docs/concepts/synchronization" description="Mutexes with PI, semaphores, event groups." />
+  <Card title="IPC" href="/docs/concepts/ipc" description="Message queues and zero-copy buffers." />
+  <Card title="Memory pools" href="/docs/concepts/memory-pools" description="Fixed-block O(1) allocation without fragmentation." />
+  <Card title="Timers" href="/docs/concepts/timers" description="Software timers — one-shot and periodic." />
+  <Card title="Tickless idle" href="/docs/concepts/tickless" description="Suppressing the tick for battery-powered designs." />
+  <Card title="Safety" href="/docs/concepts/safety" description="Stack overflow, MISRA, watchdog, assertions." />
+</Cards>

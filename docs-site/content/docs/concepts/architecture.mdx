@@ -1,0 +1,124 @@
+---
+title: Architecture
+description: Files, layers, and the dependency graph.
+---
+
+MicroRTOS is intentionally flat. Three layers, no plugin system, no virtual
+dispatch unless you turn on SMP.
+
+## Layers
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                      Your application                       │
+│                       #include "rtos.h"                     │
+├────────────────────────────────────────────────────────────┤
+│  Kernel (portable)                                          │
+│  ├─ Tasks, Scheduler, Idle              src/core/           │
+│  ├─ Mutex, Semaphore, Event             src/sync/           │
+│  ├─ Queue, Zero-copy                    src/ipc/            │
+│  ├─ Memory pools                        src/memory/         │
+│  ├─ Software timers                     src/time/           │
+│  └─ Diagnostics, MISRA helpers          src/diag/           │
+├────────────────────────────────────────────────────────────┤
+│  Port layer (one per target)                                │
+│  ├─ AVR (ATmega328P, 2560, 32U4)         src/port/avr/      │
+│  └─ ARM Cortex-M (SAM3X8E, SAMD21)        src/port/arm/     │
+├────────────────────────────────────────────────────────────┤
+│                       Hardware                              │
+└────────────────────────────────────────────────────────────┘
+```
+
+## The port interface
+
+Each port implements ~12 functions defined in `include/rtos_port.h`:
+
+```c
+void     rtos_port_init(void);
+void     rtos_port_start_scheduler(void);   // never returns
+void     rtos_port_yield(void);
+void     rtos_port_init_task_stack(rtos_tcb_t *tcb,
+                                    void (*entry)(void *),
+                                    void *arg);
+
+void     rtos_port_enter_critical(void);
+void     rtos_port_exit_critical(void);
+uint32_t rtos_port_disable_interrupts(void);
+void     rtos_port_restore_interrupts(uint32_t state);
+bool     rtos_port_is_in_isr(void);
+
+void     rtos_port_check_stack_overflow(void);
+```
+
+A new port is about 500 lines of mostly mechanical glue. See
+[Porting](/docs/porting).
+
+## Configuration
+
+Everything is compile-time. `include/rtos_config.h` has every knob:
+
+```c
+#define RTOS_TICK_RATE_HZ           1000
+#define RTOS_MAX_PRIORITIES         8
+#define RTOS_USE_TIMESLICING        1
+#define RTOS_USE_PREEMPTION         1
+#define RTOS_USE_MUTEXES            1
+// ...
+```
+
+Advanced features are gated by `RTOS_USE_*` flags. **A disabled feature
+costs zero bytes** — the linker strips the unreferenced code.
+
+| Default | Enabled |
+|---|---|
+| Mutex, semaphore, queue, timer, event, mempool | Yes |
+| Tickless idle, EDF, MPU, SMP, tracing, zerocopy, watchdog | No |
+
+## Module dependency graph
+
+```
+rtos.h
+ └─ rtos_task.h ─── rtos_scheduler.h ─── rtos_list.h
+                         │                  │
+                         ├─ rtos_kernel.h ──┤
+                         │                  │
+                         ├─ rtos_mutex.h    │
+                         ├─ rtos_sem.h      │
+                         ├─ rtos_event.h    │
+                         ├─ rtos_queue.h    │
+                         ├─ rtos_timer.h    │
+                         └─ rtos_mempool.h  │
+                                            │
+                       rtos_port.h ─────────┘
+                                            │
+                       rtos_types.h ────────┘
+```
+
+Everything resolves through `rtos.h`. You include one header.
+
+## Global state
+
+The kernel holds a small amount of mutable global state, all in
+`src/core/rtos_kernel.c`:
+
+| Symbol | Type | Purpose |
+|---|---|---|
+| `g_current_tcb` | `rtos_tcb_t *` | Currently running task |
+| `g_ready_list[N]` | `rtos_list_t[]` | One ready queue per priority |
+| `g_delayed_list` | `rtos_list_t` | Tasks waiting on `task_delay` |
+| `g_tick_count` | `volatile uint32_t` | Free-running tick counter |
+| `g_kernel_state` | `volatile enum` | `RUNNING` / `NOT_STARTED` / `SUSPENDED` |
+| `g_ready_priorities` | `uint32_t` | Bitmap — which priorities have ready tasks |
+
+The bitmap is the key to O(1) scheduling: `__builtin_ctz` finds the
+highest-priority ready task in one instruction on ARM, three on AVR.
+
+## Build outputs
+
+| File | Size (AVR release) | Notes |
+|---|---|---|
+| `build/librtos.a` | ~21 KB raw | Archive — linker only pulls what you use |
+| `build/examples/example10.elf` | 3.5 KB text | Minimal RTOS app |
+| `build/examples/example4.elf` | 5.4 KB text | Largest example (timer + event + 4 tasks) |
+
+See [Performance](/docs/performance) for per-module breakdowns.

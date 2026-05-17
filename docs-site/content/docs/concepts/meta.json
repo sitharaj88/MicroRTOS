@@ -1,0 +1,15 @@
+{
+  "title": "Concepts",
+  "pages": [
+    "index",
+    "architecture",
+    "scheduler",
+    "tasks",
+    "synchronization",
+    "ipc",
+    "memory-pools",
+    "timers",
+    "tickless",
+    "safety"
+  ]
+}

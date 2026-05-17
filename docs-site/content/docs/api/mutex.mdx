@@ -1,0 +1,83 @@
+---
+title: Mutex
+description: Recursive mutexes with priority inheritance.
+---
+
+Enabled by `RTOS_USE_MUTEXES=1` (default).
+
+## `rtos_mutex_init`
+
+```c
+void rtos_mutex_init(rtos_mutex_t *mutex);
+```
+
+Initializes a mutex to the unlocked state. Caller-allocated.
+
+## `rtos_mutex_lock`
+
+```c
+rtos_status_t rtos_mutex_lock(rtos_mutex_t *mutex, uint32_t timeout);
+```
+
+Locks the mutex, blocking up to `timeout` ticks if it's held by another
+task. Recursive — a task can lock its own mutex N times and must unlock
+N times to release.
+
+Returns:
+
+- `RTOS_OK` on success
+- `RTOS_ERR_TIMEOUT` if the mutex was still held when the timeout expired
+- `RTOS_ERR_PARAM` on `NULL` mutex
+
+### Priority inheritance
+
+If a higher-priority task blocks on a mutex held by a lower-priority
+task, the holder is boosted to the waiter's priority. When the holder
+releases, it returns to its base priority. This prevents unbounded
+priority inversion.
+
+## `rtos_mutex_unlock`
+
+```c
+rtos_status_t rtos_mutex_unlock(rtos_mutex_t *mutex);
+```
+
+Releases one level of recursion. If recursion count reaches 0, wakes the
+highest-priority waiter (if any).
+
+Returns `RTOS_ERR_STATE` if called by a task that doesn't hold the
+mutex.
+
+## `rtos_mutex_try_lock`
+
+```c
+rtos_status_t rtos_mutex_try_lock(rtos_mutex_t *mutex);
+```
+
+Non-blocking. Equivalent to `rtos_mutex_lock(mutex, RTOS_NO_WAIT)`.
+
+## `rtos_mutex_get_owner`
+
+```c
+rtos_tcb_t *rtos_mutex_get_owner(rtos_mutex_t *mutex);
+```
+
+Returns the TCB of the current holder, or `NULL` if unlocked. For
+debugging and introspection.
+
+## Example
+
+```c
+static rtos_mutex_t spi_lock;
+
+void init(void) { rtos_mutex_init(&spi_lock); }
+
+uint16_t read_sensor(uint8_t addr) {
+    if (rtos_mutex_lock(&spi_lock, RTOS_MS_TO_TICKS(100)) != RTOS_OK) {
+        return 0xFFFF;     /* timeout — busy */
+    }
+    uint16_t val = spi_xfer(addr);
+    rtos_mutex_unlock(&spi_lock);
+    return val;
+}
+```
