@@ -34,7 +34,9 @@ the base path must match the repo name.
 
 ## Deploy
 
-Push to `master`. The `.github/workflows/docs.yml` workflow:
+The `.github/workflows/docs.yml` workflow is manual-only — open the
+**Actions** tab on GitHub, pick **Docs site**, and click
+**Run workflow** on the `main` branch. The job:
 
 1. Installs deps with pnpm.
 2. Builds with `NEXT_PUBLIC_BASE_PATH=/MicroRTOS`.

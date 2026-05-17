@@ -687,7 +687,7 @@ export default function HomePage() {
 
               <p className="mt-6 text-xs text-fd-muted-foreground">
                 <Link
-                  href="https://github.com/sitharaj88/MicroRTOS/blob/master/LICENSE"
+                  href="https://github.com/sitharaj88/MicroRTOS/blob/main/LICENSE"
                   className="font-semibold text-fd-foreground hover:text-fd-primary"
                 >
                   MIT License
@@ -749,7 +749,7 @@ export default function HomePage() {
                   <li>
                     <Link
                       className="text-fd-foreground hover:text-fd-primary"
-                      href="https://github.com/sitharaj88/MicroRTOS/blob/master/docs/MISRA_COMPLIANCE.md"
+                      href="https://github.com/sitharaj88/MicroRTOS/blob/main/docs/MISRA_COMPLIANCE.md"
                       target="_blank"
                       rel="noreferrer noopener"
                     >
@@ -759,7 +759,7 @@ export default function HomePage() {
                   <li>
                     <Link
                       className="text-fd-foreground hover:text-fd-primary"
-                      href="https://github.com/sitharaj88/MicroRTOS/blob/master/LICENSE"
+                      href="https://github.com/sitharaj88/MicroRTOS/blob/main/LICENSE"
                       target="_blank"
                       rel="noreferrer noopener"
                     >
