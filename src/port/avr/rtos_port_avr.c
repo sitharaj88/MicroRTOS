@@ -104,7 +104,7 @@ void rtos_port_init(void)
  * Saves all 32 general purpose registers, SREG, and updates stack pointer.
  */
 #define SAVE_CONTEXT()                                          \
-    asm volatile (                                              \
+    __asm__ volatile (                                              \
         "push   r0                              \n\t"           \
         "in     r0, __SREG__                    \n\t"           \
         "cli                                    \n\t"           \
@@ -154,7 +154,7 @@ void rtos_port_init(void)
  * Restores stack pointer, all registers, and SREG.
  */
 #define RESTORE_CONTEXT()                                       \
-    asm volatile (                                              \
+    __asm__ volatile (                                              \
         "lds    r26, g_current_tcb              \n\t"           \
         "lds    r27, g_current_tcb + 1          \n\t"           \
         "ld     r28, x+                         \n\t"           \
@@ -270,7 +270,7 @@ void rtos_port_start_scheduler(void)
     RESTORE_CONTEXT();
 
     /* Enable interrupts and return to task */
-    asm volatile ("reti");
+    __asm__ volatile ("reti");
 
     /* Should never reach here */
     for (;;) { }
@@ -331,7 +331,7 @@ ISR(TIMER0_COMPA_vect, ISR_NAKED)
     RESTORE_CONTEXT();
 
     /* Return from interrupt */
-    asm volatile ("reti");
+    __asm__ volatile ("reti");
 }
 
 /*===========================================================================*/
@@ -404,5 +404,169 @@ void rtos_port_check_stack_overflow(void)
 }
 
 #endif /* RTOS_CHECK_STACK_OVERFLOW */
+
+/*===========================================================================*/
+/* Tickless Idle Support                                                      */
+/*===========================================================================*/
+
+#if RTOS_USE_TICKLESS_IDLE
+
+#include "rtos_tickless.h"
+#include <avr/sleep.h>
+#include <avr/power.h>
+
+/* Saved timer state for tickless mode */
+static volatile uint8_t tickless_saved_ocr = 0;
+static volatile uint32_t tickless_expected_ticks = 0;
+static volatile uint32_t tickless_elapsed_ticks = 0;
+static volatile bool tickless_active = false;
+
+/* Use Timer1 for extended tickless periods (16-bit timer) */
+static volatile uint16_t tickless_timer1_overflows = 0;
+static volatile uint16_t tickless_timer1_target = 0;
+
+/* Timer1 overflow ISR for counting long sleep periods */
+ISR(TIMER1_OVF_vect)
+{
+    tickless_timer1_overflows++;
+}
+
+void rtos_port_tickless_setup(uint32_t sleep_ticks)
+{
+    uint32_t timer_counts;
+    uint16_t compare_value;
+
+    /* Save current Timer0 state */
+    tickless_saved_ocr = OCR0A;
+    tickless_expected_ticks = sleep_ticks;
+    tickless_active = true;
+    tickless_elapsed_ticks = 0;
+    tickless_timer1_overflows = 0;
+
+    /* Stop Timer0 (normal tick timer) */
+    TCCR0B = 0;
+
+    /*
+     * Use Timer1 (16-bit) for extended sleep.
+     * This allows much longer sleep periods than the 8-bit Timer0.
+     *
+     * Calculate timer counts needed:
+     * counts = ticks * (F_CPU / prescaler / RTOS_TICK_RATE_HZ)
+     */
+    timer_counts = sleep_ticks * (F_CPU / 64 / RTOS_TICK_RATE_HZ);
+
+    if (timer_counts > 65535) {
+        /* Need multiple overflows - use CTC mode with overflow counting */
+        compare_value = 65535;
+        tickless_timer1_target = (uint16_t)(timer_counts / 65536) + 1;
+
+        /* Enable overflow interrupt */
+        TIMSK1 = (1 << TOIE1);
+    } else {
+        compare_value = (uint16_t)timer_counts;
+        tickless_timer1_target = 1;
+        TIMSK1 = (1 << OCIE1A);  /* Compare match interrupt */
+    }
+
+    /* Configure Timer1 */
+    TCCR1A = 0;                     /* Normal mode */
+    TCCR1B = 0;                     /* Stopped for now */
+    TCNT1 = 0;                      /* Reset counter */
+    OCR1A = compare_value;          /* Set compare value */
+
+    /* Start Timer1 with prescaler 64 */
+    TCCR1B = (1 << CS11) | (1 << CS10);
+}
+
+void rtos_port_sleep_enter(rtos_sleep_mode_t mode)
+{
+    /* Set appropriate sleep mode */
+    switch (mode) {
+        case RTOS_SLEEP_POWER_DOWN:
+            set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+            break;
+
+        case RTOS_SLEEP_STANDBY:
+            set_sleep_mode(SLEEP_MODE_STANDBY);
+            break;
+
+        case RTOS_SLEEP_IDLE:
+        default:
+            set_sleep_mode(SLEEP_MODE_IDLE);
+            break;
+    }
+
+    /* Enable sleep, enter sleep mode */
+    sleep_enable();
+    sei();  /* Ensure interrupts are enabled for wake */
+    sleep_cpu();
+    sleep_disable();
+
+    /* Execution continues here after wakeup */
+}
+
+uint32_t rtos_port_tickless_get_elapsed(void)
+{
+    uint32_t elapsed_counts;
+    uint16_t current_count;
+    uint16_t overflows;
+
+    if (!tickless_active) {
+        return 0;
+    }
+
+    /* Read Timer1 state atomically */
+    cli();
+    current_count = TCNT1;
+    overflows = tickless_timer1_overflows;
+    sei();
+
+    /* Calculate total elapsed counts */
+    elapsed_counts = ((uint32_t)overflows * 65536UL) + current_count;
+
+    /* Convert counts to ticks */
+    tickless_elapsed_ticks = elapsed_counts / (F_CPU / 64 / RTOS_TICK_RATE_HZ);
+
+    /* Don't exceed expected ticks */
+    if (tickless_elapsed_ticks > tickless_expected_ticks) {
+        tickless_elapsed_ticks = tickless_expected_ticks;
+    }
+
+    return tickless_elapsed_ticks;
+}
+
+void rtos_port_tickless_restore(void)
+{
+    if (!tickless_active) {
+        return;
+    }
+
+    /* Stop Timer1 */
+    TCCR1B = 0;
+    TIMSK1 = 0;
+
+    /* Restore Timer0 for normal tick operation */
+    TCNT0 = 0;
+    OCR0A = tickless_saved_ocr;
+    TCCR0A = (1 << WGM01);              /* CTC mode */
+    TIMSK0 = (1 << OCIE0A);             /* Enable compare interrupt */
+    TCCR0B = (1 << CS01) | (1 << CS00); /* Start with prescaler 64 */
+
+    tickless_active = false;
+}
+
+bool rtos_port_tickless_timer_wakeup(void)
+{
+    /* Check if Timer1 compare or overflow caused wakeup */
+    return (TIFR1 & ((1 << OCF1A) | (1 << TOV1))) != 0;
+}
+
+/* Timer1 Compare Match A ISR - wakeup from tickless sleep */
+ISR(TIMER1_COMPA_vect)
+{
+    /* Just wake up - actual handling done in tickless_exit */
+}
+
+#endif /* RTOS_USE_TICKLESS_IDLE */
 
 #endif /* __AVR__ || RTOS_PLATFORM_AVR */

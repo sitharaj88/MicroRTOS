@@ -414,4 +414,137 @@ void rtos_port_check_stack_overflow(void)
 
 #endif /* RTOS_CHECK_STACK_OVERFLOW */
 
+/*===========================================================================*/
+/* Tickless Idle Support                                                      */
+/*===========================================================================*/
+
+#if RTOS_USE_TICKLESS_IDLE
+
+#include "rtos_tickless.h"
+
+/* SCB System Control Register */
+#define SCB_SCR             (*(volatile uint32_t *)(SCB_BASE + 0x10))
+#define SCB_SCR_SLEEPDEEP   (1UL << 2)
+#define SCB_SCR_SLEEPONEXIT (1UL << 1)
+
+/* Saved SysTick state for tickless mode */
+static volatile uint32_t tickless_systick_load = 0;
+static volatile uint32_t tickless_expected_ticks = 0;
+static volatile bool tickless_active = false;
+
+void rtos_port_tickless_setup(uint32_t sleep_ticks)
+{
+    uint32_t reload_value;
+
+    /* Save current SysTick load value */
+    tickless_systick_load = SYSTICK_LOAD;
+    tickless_expected_ticks = sleep_ticks;
+    tickless_active = true;
+
+    /* Stop SysTick */
+    SYSTICK_CTRL &= ~SYSTICK_CTRL_ENABLE;
+
+    /* Calculate new reload value for extended period */
+    reload_value = (F_CPU / RTOS_TICK_RATE_HZ) * sleep_ticks;
+
+    /* Clamp to 24-bit maximum */
+    if (reload_value > 0x00FFFFFF) {
+        reload_value = 0x00FFFFFF;
+    }
+
+    /* Configure SysTick for extended period */
+    SYSTICK_VAL = 0;
+    SYSTICK_LOAD = reload_value - 1;
+    SYSTICK_CTRL = SYSTICK_CTRL_CLKSOURCE |
+                   SYSTICK_CTRL_TICKINT |
+                   SYSTICK_CTRL_ENABLE;
+}
+
+void rtos_port_sleep_enter(rtos_sleep_mode_t mode)
+{
+    switch (mode) {
+        case RTOS_SLEEP_STANDBY:
+        case RTOS_SLEEP_POWER_DOWN:
+            /* Set SLEEPDEEP for deeper sleep modes */
+            SCB_SCR |= SCB_SCR_SLEEPDEEP;
+            break;
+
+        case RTOS_SLEEP_IDLE:
+        default:
+            /* Normal WFI sleep */
+            SCB_SCR &= ~SCB_SCR_SLEEPDEEP;
+            break;
+    }
+
+    /* Data synchronization barrier before WFI */
+    __asm__ __volatile__("dsb" ::: "memory");
+
+    /* Wait for interrupt */
+    __asm__ __volatile__("wfi");
+
+    /* Instruction barrier after wakeup */
+    __asm__ __volatile__("isb");
+
+    /* Clear SLEEPDEEP if it was set */
+    SCB_SCR &= ~SCB_SCR_SLEEPDEEP;
+}
+
+uint32_t rtos_port_tickless_get_elapsed(void)
+{
+    uint32_t elapsed_counts;
+    uint32_t reload_value;
+    uint32_t current_value;
+    uint32_t ticks_per_count;
+    uint32_t elapsed_ticks;
+
+    if (!tickless_active) {
+        return 0;
+    }
+
+    /* Get the reload value and current count */
+    reload_value = SYSTICK_LOAD + 1;
+    current_value = SYSTICK_VAL;
+
+    /* Calculate elapsed counts */
+    elapsed_counts = reload_value - current_value;
+
+    /* Convert to ticks */
+    ticks_per_count = F_CPU / RTOS_TICK_RATE_HZ;
+    elapsed_ticks = elapsed_counts / ticks_per_count;
+
+    /* Don't exceed expected ticks */
+    if (elapsed_ticks > tickless_expected_ticks) {
+        elapsed_ticks = tickless_expected_ticks;
+    }
+
+    return elapsed_ticks;
+}
+
+void rtos_port_tickless_restore(void)
+{
+    if (!tickless_active) {
+        return;
+    }
+
+    /* Stop SysTick */
+    SYSTICK_CTRL &= ~SYSTICK_CTRL_ENABLE;
+
+    /* Restore original SysTick configuration */
+    SYSTICK_VAL = 0;
+    SYSTICK_LOAD = tickless_systick_load;
+    SYSTICK_CTRL = SYSTICK_CTRL_CLKSOURCE |
+                   SYSTICK_CTRL_TICKINT |
+                   SYSTICK_CTRL_ENABLE;
+
+    tickless_active = false;
+}
+
+bool rtos_port_tickless_timer_wakeup(void)
+{
+    /* Check if SysTick interrupt is pending */
+    return (SCB_ICSR & (1UL << 26)) != 0;  /* PENDSTSET bit */
+}
+
+#endif /* RTOS_USE_TICKLESS_IDLE */
+
 #endif /* __arm__ || __ARM_ARCH || RTOS_PLATFORM_ARM */

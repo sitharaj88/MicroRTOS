@@ -186,6 +186,111 @@ extern "C" {
 #endif
 
 /*===========================================================================*/
+/* Advanced / Optional Features                                               */
+/*===========================================================================*/
+/*
+ * These features add code and RAM cost and are disabled by default.
+ * Flip to 1 here (or pass -DRTOS_USE_xxx=1 on the command line) to enable.
+ * Each feature's public header also declares the same default as a fallback.
+ */
+
+/**
+ * Enable Earliest-Deadline-First (EDF) scheduler extensions.
+ * See include/rtos_deadline.h.
+ */
+#ifndef RTOS_USE_EDF_SCHEDULER
+    #define RTOS_USE_EDF_SCHEDULER      0
+#endif
+
+/**
+ * Enable Memory Protection Unit (MPU) support.
+ * ARM Cortex-M only. See include/rtos_mpu.h.
+ */
+#ifndef RTOS_USE_MPU
+    #define RTOS_USE_MPU                0
+#endif
+
+/**
+ * Enable Symmetric Multi-Processing (SMP) support.
+ * Multi-core targets only (ESP32, RP2040). See include/rtos_smp.h.
+ */
+#ifndef RTOS_USE_SMP
+    #define RTOS_USE_SMP                0
+#endif
+
+/**
+ * Enable system-level hardware watchdog support.
+ * See include/rtos_watchdog.h.
+ */
+#ifndef RTOS_USE_WATCHDOG
+    #define RTOS_USE_WATCHDOG           0
+#endif
+
+/**
+ * Enable per-task software watchdog support.
+ * See include/rtos_watchdog.h.
+ */
+#ifndef RTOS_USE_TASK_WATCHDOG
+    #define RTOS_USE_TASK_WATCHDOG      0
+#endif
+
+/**
+ * Enable kernel event tracing (SystemView-style).
+ * See include/rtos_trace.h.
+ */
+#ifndef RTOS_USE_TRACING
+    #define RTOS_USE_TRACING            0
+#endif
+
+/**
+ * Enable zero-copy IPC buffers.
+ * See include/rtos_zerocopy.h.
+ */
+#ifndef RTOS_USE_ZEROCOPY
+    #define RTOS_USE_ZEROCOPY           0
+#endif
+
+/*===========================================================================*/
+/* Low Power / Tickless Configuration                                         */
+/*===========================================================================*/
+
+/**
+ * Enable tickless idle mode for low power operation.
+ * When enabled, the system suppresses tick interrupts during idle
+ * to reduce power consumption.
+ */
+#ifndef RTOS_USE_TICKLESS_IDLE
+    #define RTOS_USE_TICKLESS_IDLE      0
+#endif
+
+/**
+ * Minimum number of ticks worth entering tickless sleep.
+ * If the next wake time is less than this, normal idle is used.
+ */
+#ifndef RTOS_TICKLESS_MIN_TICKS
+    #define RTOS_TICKLESS_MIN_TICKS     2
+#endif
+
+/**
+ * Maximum number of ticks the system can sleep in tickless mode.
+ * Limited by hardware timer capabilities.
+ */
+#ifndef RTOS_TICKLESS_MAX_TICKS
+    #if RTOS_PLATFORM_AVR
+        #define RTOS_TICKLESS_MAX_TICKS     1000    /* ~1 second max on AVR */
+    #else
+        #define RTOS_TICKLESS_MAX_TICKS     0xFFFFFF /* ~16M ticks on ARM */
+    #endif
+#endif
+
+/**
+ * Enable tickless idle hooks (pre-sleep and post-sleep callbacks).
+ */
+#ifndef RTOS_USE_TICKLESS_HOOKS
+    #define RTOS_USE_TICKLESS_HOOKS     0
+#endif
+
+/*===========================================================================*/
 /* Runtime Statistics                                                         */
 /*===========================================================================*/
 

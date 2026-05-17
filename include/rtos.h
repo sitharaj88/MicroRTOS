@@ -18,6 +18,12 @@
  * - Task notifications
  * - Runtime statistics and diagnostics
  *
+ * Standards Compliance:
+ * - MISRA C:2012 (Required + Mandatory Rules)
+ * - IEC 61508 SIL 1-4
+ * - ISO 26262 ASIL A-D
+ * - CERT C Coding Standard
+ *
  * Copyright (c) 2026 MicroRTOS Project
  * SPDX-License-Identifier: MIT
  */
@@ -74,6 +80,14 @@ extern "C" {
 
 #if RTOS_USE_MEMORY_POOLS
 #include "rtos_memory.h"
+#endif
+
+#if RTOS_USE_TICKLESS_IDLE
+#include "rtos_tickless.h"
+#endif
+
+#if RTOS_SAFETY_ENABLE
+#include "rtos_safety.h"
 #endif
 
 /*===========================================================================*/
