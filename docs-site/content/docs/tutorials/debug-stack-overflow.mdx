@@ -1,0 +1,251 @@
+---
+title: Debugging a stack overflow
+description: What it looks like, how to find the culprit task, and how to size stacks correctly.
+---
+
+Stack overflows are the most common new-RTOS bug. The symptoms range
+from "hangs at startup" to "works fine for 10 minutes then crashes
+randomly." Because stack memory lives next to TCBs and kernel
+structures, an overflow corrupts whatever happens to be neighboring —
+often in ways that don't manifest until much later.
+
+MicroRTOS catches most of them via a stack canary + SP check. This
+tutorial walks through producing one, observing it, and fixing it.
+
+## What you'll learn
+
+- How the kernel's stack-overflow detection works.
+- What `mr_stack_overflow_hook` does and how to override it.
+- The `mr_task_get_stack_high_water` workflow for sizing stacks.
+
+## Hardware
+
+Arduino Uno. We'll deliberately overflow a stack on purpose, observe
+the kernel catch it, then fix the bug.
+
+## Step-by-step
+
+<Steps>
+
+<Step>
+
+**Write a program with a too-small stack.** Recursion is the easiest
+way to blow a stack on demand.
+
+```c
+#include "micrortos.h"
+#include <avr/io.h>
+
+static mr_tcb_t  bomb_tcb;
+static uint8_t   bomb_stack[128];     /* deliberately small */
+
+static uint16_t deep_recursion(uint16_t depth, uint16_t target) {
+    uint8_t big_buffer[20];           /* eats stack on each call */
+    big_buffer[0] = (uint8_t)depth;
+    big_buffer[19] = (uint8_t)(depth >> 8);
+
+    if (depth >= target) return depth;
+    return deep_recursion(depth + 1, target);
+}
+
+static void bomb_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB5);
+    PORTB |= (1 << PB5);              /* LED on — we're alive */
+
+    /* This will smash through our 128-byte stack. */
+    uint16_t r = deep_recursion(0, 50);
+    (void)r;
+
+    /* Never reached. */
+    PORTB &= ~(1 << PB5);
+    while (1) { }
+}
+
+int main(void) {
+    mr_kernel_init();
+    mr_task_create(&bomb_tcb, "bomb", bomb_task, NULL, 2,
+                   bomb_stack, sizeof(bomb_stack));
+    mr_kernel_start();
+}
+```
+
+</Step>
+
+<Step>
+
+**Override the stack-overflow hook** so we can see *which* task
+overflowed. The default just disables interrupts and loops; we
+want a visual signal.
+
+```c
+void mr_stack_overflow_hook(mr_tcb_t *tcb) {
+    (void)tcb;
+    DDRB  |= (1 << PB4);              /* pin 12 — alarm LED */
+    PORTB |= (1 << PB4);
+
+    /* In real code: log tcb->name, dump SP, reset.
+     * For now: hang loudly with the alarm LED on. */
+    while (1) { }
+}
+```
+
+</Step>
+
+<Step>
+
+**Flash and watch.** What you should see:
+
+- Pin 13 (status) turns on briefly — the task started.
+- Pin 12 (alarm) turns on and stays on — the kernel caught the
+  overflow.
+- Everything halts.
+
+The kernel checks `*tcb->stack_base` against the `0xA5` canary on every
+context switch. The first time the recursion punches through the
+bottom of the stack and corrupts that byte, the next switch sees the
+mismatch and calls our hook.
+
+</Step>
+
+<Step>
+
+**Read the canary location.** When you're at the hook, you can inspect
+which byte got smashed.
+
+```c
+void mr_stack_overflow_hook(mr_tcb_t *tcb) {
+    uint8_t canary = *((uint8_t *)tcb->stack_base);
+    /* canary is now != 0xA5 — that's how the hook got called.
+     * In a real system you'd UART-print it. */
+    (void)canary;
+    while (1) { }
+}
+```
+
+</Step>
+
+<Step>
+
+**Fix the bug.** Two options:
+
+**Option A: bump the stack.**
+
+```c
+static uint8_t bomb_stack[512];   /* now big enough */
+```
+
+The alarm LED no longer fires; the task finishes its recursion and
+loops.
+
+**Option B: don't recurse.** Convert to a loop:
+
+```c
+static uint16_t iter_count(uint16_t target) {
+    uint8_t big_buffer[20];           /* one frame, not 50 */
+    uint16_t i;
+    for (i = 0; i < target; i++) {
+        big_buffer[i % 20] = (uint8_t)i;
+    }
+    return i;
+}
+```
+
+In embedded, **recursion is almost always a bug.** Loops are stack-
+predictable; recursion isn't.
+
+</Step>
+
+</Steps>
+
+## Sizing stacks properly
+
+After fixing the obvious overflow, instrument the task to find the
+real high-water mark:
+
+```c
+static void monitor_task(void *arg) {
+    (void)arg;
+
+    while (1) {
+        uint16_t free = mr_task_get_stack_high_water(&bomb_tcb);
+        /* In real code: UART-print free.
+         * Or: if free < 32, set a warning LED. */
+        (void)free;
+
+        mr_task_delay(MR_MS_TO_TICKS(1000));
+    }
+}
+```
+
+The function counts how many bottom-of-stack bytes still hold the
+`0xA5` canary pattern. That's the **most slack the task has ever
+had** since boot.
+
+**Workflow:**
+
+1. Start with `MR_MINIMAL_STACK_SIZE` (128 B on AVR).
+2. Run the task through worst-case workloads (deepest recursion,
+   biggest message, hardest computation).
+3. Check `mr_task_get_stack_high_water`. If it drops below ~32, bump
+   the stack.
+4. If it stays above ~50% of the stack size, you can shrink to save
+   SRAM.
+
+## Common sources of unexpected stack usage
+
+| Source | Cost |
+|---|---|
+| Function call | 2–4 B return address + saved callee regs |
+| Local `uint8_t buf[N]` | N bytes |
+| `printf("%f", ...)` | hundreds of bytes (avr-libc's float printf is huge) |
+| Recursion | × depth (almost always a bug in embedded) |
+| Big struct on stack | sizeof(struct) bytes — heap-allocate or `static` it instead |
+| ISR fires while task is at peak SP | +35 B for AVR context save |
+
+## When the canary check isn't enough
+
+The canary check fires when SP **eventually** dips into the bottom of
+the stack. If your task overflows so violently that it skips past the
+bottom byte without touching it, the check misses.
+
+For high-assurance code, use `MR_CHECK_STACK_OVERFLOW = 2` (full fill
+check — scans the entire bottom for the pattern, not just one byte).
+Slower but catches more.
+
+## What the hook should do in production
+
+The default hook (`cli` + `while(1)`) is fine for development but
+won't recover in the field. Production options:
+
+- **Log + reset.** Save the task name + SP somewhere persistent, then
+  let the hardware watchdog fire.
+- **Telemetry beacon.** Light an alarm LED, transmit a fault code over
+  whatever side channel you have.
+- **Safe-mode restart.** Reinitialize with reduced functionality.
+
+```c
+void mr_stack_overflow_hook(mr_tcb_t *tcb) {
+    save_post_mortem(tcb->name, (uintptr_t)tcb->stack_ptr,
+                     tcb->stack_base, tcb->stack_size);
+    while (1) wdt_reset_dependent();   /* let WDT fire */
+}
+```
+
+## Try this next
+
+- **Watch the high-water in real-time** — print it from a low-priority
+  monitor task and watch how it drops as your tasks do harder work.
+- **Compute a stack budget** for your real app. Sum up: deepest call,
+  largest locals, ISR overhead. Compare to actual usage.
+- **Set up a CI assertion**: failing build if any task's `stack_size`
+  is less than 2× its observed high-water (after a representative
+  test run).
+
+## See also
+
+<Cards>
+  <Card title="Safety concept" href="/docs/concepts/safety" description="Asserts, MISRA, watchdog — all the safety layers." />
+  <Card title="Tasks API" href="/docs/api/tasks" description="mr_task_get_stack_high_water and friends." />
+  <Card title="Kernel API" href="/docs/api/kernel" description="mr_stack_overflow_hook and other kernel hooks." />
+</Cards>

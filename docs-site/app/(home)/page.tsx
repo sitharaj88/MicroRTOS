@@ -337,6 +337,7 @@ export default function HomePage() {
               </div>
               <ul className="space-y-2">
                 <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/getting-started">Get started</Link></li>
+                <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/tutorials">Tutorials</Link></li>
                 <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/concepts">Concepts</Link></li>
                 <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/api">API reference</Link></li>
                 <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/performance">Performance</Link></li>

@@ -1,0 +1,60 @@
+---
+title: Tutorials
+description: Hands-on walkthroughs — each ends with a working program you can flash.
+icon: GraduationCap
+---
+
+Each tutorial picks one realistic embedded scenario and walks through
+it end-to-end: the problem, the API choice, the code, and the
+verification step. By the end you have a `.c` file you can copy into
+an `examples/` directory and flash.
+
+If you haven't already, finish [Get started](/docs/getting-started)
+first — these tutorials assume your build and flash workflow is up.
+
+## Multi-task fundamentals
+
+<Cards>
+  <Card title="Two tasks at different priorities" href="/docs/tutorials/two-tasks" description="Run a high-rate sensor task alongside a slower UI task. The basics of priority preemption." />
+  <Card title="Sharing a peripheral with a mutex" href="/docs/tutorials/mutex-peripheral" description="Two tasks need the SPI bus. Use priority-inheritance mutexes to serialize them safely." />
+  <Card title="ISR-to-task signaling" href="/docs/tutorials/isr-signaling" description="UART RX interrupt wakes a parser task via a binary semaphore. The canonical ISR signal pattern." />
+</Cards>
+
+## Communication patterns
+
+<Cards>
+  <Card title="Producer / consumer with a queue" href="/docs/tutorials/queue-producer-consumer" description="A sensor task pushes readings into a queue; a writer task drains them to flash. Back-pressure handled." />
+  <Card title="Coordinating with event groups" href="/docs/tutorials/event-groups" description="Wait for any of several signals — button, timeout, packet — without juggling multiple semaphores." />
+  <Card title="Memory pools" href="/docs/tutorials/memory-pools" description="Allocate fixed-size buffers with O(1) timing and zero fragmentation. The right way to do dynamic-looking allocation." />
+</Cards>
+
+## Time and power
+
+<Cards>
+  <Card title="Software timers" href="/docs/tutorials/software-timers" description="Periodic blinkers, one-shot debounce, and a soft-watchdog pattern. No extra TCBs needed." />
+  <Card title="Battery-friendly tickless" href="/docs/tutorials/tickless-low-power" description="Stop the tick during long sleeps. 40× current reduction on the Uno." />
+  <Card title="Hard real-time with EDF" href="/docs/tutorials/edf-deadlines" description="Earliest Deadline First scheduling for periodic tasks with known WCETs." />
+</Cards>
+
+## Advanced
+
+<Cards>
+  <Card title="Sequential logic with coroutines" href="/docs/tutorials/async-coroutines" description="Run state machines that yield without a full TCB — perfect for I/O sequences and protocol parsers." />
+  <Card title="Debugging a stack overflow" href="/docs/tutorials/debug-stack-overflow" description="What it looks like, how to find the culprit task, and how to size stacks correctly." />
+</Cards>
+
+## Tutorial format
+
+Every tutorial follows the same shape so you know what you're getting:
+
+<Steps>
+  <Step>**What you'll build** — a working program in 50–100 lines.</Step>
+  <Step>**What you'll learn** — the API choices and the reasons behind them.</Step>
+  <Step>**Hardware needs** — usually just the Arduino Uno. Some tutorials need a button or an LED on a specific pin.</Step>
+  <Step>**Step-by-step code** — broken down into 5–10 numbered steps with explanations.</Step>
+  <Step>**Verify** — what you should see on the board, with troubleshooting.</Step>
+  <Step>**Try this next** — variations that build muscle memory.</Step>
+</Steps>
+
+If a tutorial doesn't deliver, [open an issue](https://github.com/sitharaj88/rtos/issues) — we'd
+rather rewrite it than leave it confusing.

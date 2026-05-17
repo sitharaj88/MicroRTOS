@@ -1,0 +1,236 @@
+---
+title: Battery-friendly tickless idle
+description: Stop the tick during long sleeps. 40× current reduction on the Uno.
+---
+
+Every millisecond, Timer0 fires, the CPU wakes, the tick handler
+increments `g_tick_count`, and the CPU goes back to sleep — even when
+no task is ready and the next scheduled event is far away.
+
+For battery-powered designs that's a lot of wasted wakeups. **Tickless
+idle** suppresses the tick when the system goes idle, reprogramming
+the hardware timer to fire only at the next scheduled event. The CPU
+enters sleep mode and stays there until then.
+
+## What you'll build
+
+- A **sensor task** that wakes every 5 seconds, samples (simulated),
+  and goes back to sleep.
+- A **monitor task** that wakes every 30 seconds.
+- The kernel enters AVR `POWER_DOWN` sleep between activities — ~0.3 mA
+  measured average vs ~12 mA constantly ticking.
+
+## What you'll learn
+
+- How to enable tickless and choose a sleep mode.
+- The `pre_sleep_hook` / `post_sleep_hook` pattern for peripheral
+  power management.
+- Why `MR_TICKLESS_MIN_TICKS` exists.
+
+## Hardware
+
+Arduino Uno. To **measure** current draw you need a multimeter in
+series with the USB or 5 V line; without one, you'll just observe the
+LED blink pattern.
+
+## Step-by-step
+
+<Steps>
+
+<Step>
+
+**Enable tickless at compile time.** Either edit `mr_config.h` or pass
+the flag in your build:
+
+```bash
+make EXAMPLE=N CFLAGS_BASE+=" -DMR_USE_TICKLESS_IDLE=1"
+```
+
+Or add it to `examples/your/main.c` before the include:
+
+```c
+#define MR_USE_TICKLESS_IDLE 1
+#include "micrortos.h"
+```
+
+</Step>
+
+<Step>
+
+**Sensor task — 5 s cycle.**
+
+```c
+#include <avr/io.h>
+
+static mr_tcb_t  sensor_tcb;
+static uint8_t   sensor_stack[192];
+
+static volatile uint16_t sample = 0;
+
+static void sensor_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB5);
+
+    while (1) {
+        /* Brief on-CPU work — ~50 ms. */
+        PORTB |=  (1 << PB5);
+        for (volatile uint32_t i = 0; i < 30000; i++) { }
+        sample++;
+        PORTB &= ~(1 << PB5);
+
+        /* Long sleep — this is where the magic happens. */
+        mr_task_delay(MR_MS_TO_TICKS(5000));
+    }
+}
+```
+
+</Step>
+
+<Step>
+
+**Monitor task — 30 s cycle.**
+
+```c
+static mr_tcb_t  monitor_tcb;
+static uint8_t   monitor_stack[192];
+
+static void monitor_task(void *arg) {
+    (void)arg;
+    while (1) {
+        /* Tiny activity — flash pin 12 briefly. */
+        DDRB  |= (1 << PB4);
+        PORTB ^= (1 << PB4);
+        mr_task_delay(MR_MS_TO_TICKS(10));
+        PORTB ^= (1 << PB4);
+
+        mr_task_delay(MR_MS_TO_TICKS(30000));
+    }
+}
+```
+
+</Step>
+
+<Step>
+
+**(Optional) Implement the sleep hooks.** Power down peripherals
+during sleep and bring them back on wake.
+
+```c
+#define MR_USE_TICKLESS_HOOKS 1
+
+void mr_tickless_pre_sleep_hook(uint32_t expected_ticks) {
+    (void)expected_ticks;
+    /* Disable the ADC. */
+    ADCSRA &= ~(1 << ADEN);
+    /* Disable analog comparator. */
+    ACSR |= (1 << ACD);
+    /* Disable BOD if you can — saves additional µA. */
+}
+
+void mr_tickless_post_sleep_hook(uint32_t slept_ticks) {
+    (void)slept_ticks;
+    /* Bring ADC back. */
+    ADCSRA |= (1 << ADEN);
+}
+```
+
+These run on the AVR before `sleep_cpu()` and after wake, from the
+idle task's context.
+
+</Step>
+
+<Step>
+
+**Initialize tickless and start.**
+
+```c
+int main(void) {
+    mr_kernel_init();
+
+    mr_tickless_init();
+    mr_tickless_enable(true);
+    mr_tickless_set_sleep_mode(MR_SLEEP_POWER_DOWN);
+
+    mr_task_create(&sensor_tcb, "sensor", sensor_task, NULL, 2,
+                   sensor_stack, sizeof(sensor_stack));
+    mr_task_create(&monitor_tcb, "monitor", monitor_task, NULL, 3,
+                   monitor_stack, sizeof(monitor_stack));
+
+    mr_kernel_start();
+}
+```
+
+The sleep mode is the deepest one on AVR that lets us wake from the
+Watchdog (which the tickless implementation reprograms as the long-
+range wake source).
+
+</Step>
+
+</Steps>
+
+## Verify
+
+### By LED
+
+- Pin 13 LED **on for 50 ms** then off, repeating every 5 s.
+- Pin 12 LED **flashes briefly** every 30 s.
+- Between activities, both LEDs are off and the CPU is asleep.
+
+### By multimeter (if you have one)
+
+| State | Current |
+|---|---|
+| CPU running normally | ~12 mA |
+| Tickless `POWER_DOWN` | ~0.1–0.3 mA |
+| With ADC/BOD also off | ~0.05 mA |
+
+The Uno's regulator and USB chip dominate; if you're on raw 5 V to the
+ATmega328P pins, you'll see lower numbers.
+
+## Choosing a sleep mode
+
+| Mode | Wakes on | Wake latency | Saving |
+|---|---|---|---|
+| `MR_SLEEP_IDLE` | Any interrupt | &lt;1 µs | modest |
+| `MR_SLEEP_ADC` | ADC complete, some others | ~1 µs | a bit more |
+| `MR_SLEEP_STANDBY` | INT pins, watchdog | ~6 µs | significant |
+| `MR_SLEEP_POWER_DOWN` | INT pins, watchdog only | ~6 µs | maximum |
+
+Deeper modes save more but take longer to wake. For a sensor that
+samples every 5 s, the ~6 µs wake from `POWER_DOWN` is invisible.
+
+## Caveats
+
+<Callout type="warn">
+
+- **USART, ADC, SPI all stop in `POWER_DOWN`.** If you need them
+  immediately on wake, use `STANDBY` (slightly worse current draw but
+  peripherals stay alive).
+
+- **`mr_task_delay(N)` where N < `MR_TICKLESS_MIN_TICKS`** stays in
+  regular tick mode. Setting `MR_TICKLESS_MIN_TICKS = 2` is fine for
+  most apps; setting it to 1 wastes power on the sleep-mode entry/exit
+  overhead.
+
+- **External wake on a pin** (pin-change interrupt) requires that pin
+  configured. The kernel doesn't do this for you.
+
+</Callout>
+
+## Try this next
+
+- **Add a button on pin 2 (INT0)** that wakes the system on press.
+  Use `EICRA` to set falling-edge trigger and `EIMSK` to enable.
+- **Measure** with a multimeter. Compare the same code with
+  `mr_tickless_enable(false)` — that's the non-tickless baseline.
+- **Statistics.** Print `mr_tickless_get_total_slept()` periodically to
+  see how much time you spent in deep sleep vs how much wall-clock
+  passed.
+
+## See also
+
+<Cards>
+  <Card title="Tickless API" href="/docs/api/tickless" description="Full surface." />
+  <Card title="Tickless concept" href="/docs/concepts/tickless" description="How tick suppression actually works." />
+  <Card title="Software timers tutorial" href="/docs/tutorials/software-timers" description="Timers integrate with tickless automatically." />
+</Cards>

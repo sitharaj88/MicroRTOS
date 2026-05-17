@@ -22,13 +22,18 @@ export const baseOptions: BaseLayoutProps = {
       active: 'nested-url',
     },
     {
-      text: 'Examples',
-      url: '/docs/examples',
+      text: 'Tutorials',
+      url: '/docs/tutorials',
       active: 'nested-url',
     },
     {
       text: 'API',
       url: '/docs/api',
+      active: 'nested-url',
+    },
+    {
+      text: 'Examples',
+      url: '/docs/examples',
       active: 'nested-url',
     },
   ],

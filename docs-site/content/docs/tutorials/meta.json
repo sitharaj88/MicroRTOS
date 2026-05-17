@@ -1,0 +1,21 @@
+{
+  "title": "Tutorials",
+  "pages": [
+    "index",
+    "---Multi-task fundamentals---",
+    "two-tasks",
+    "mutex-peripheral",
+    "isr-signaling",
+    "---Communication patterns---",
+    "queue-producer-consumer",
+    "event-groups",
+    "memory-pools",
+    "---Time and power---",
+    "software-timers",
+    "tickless-low-power",
+    "edf-deadlines",
+    "---Advanced---",
+    "async-coroutines",
+    "debug-stack-overflow"
+  ]
+}

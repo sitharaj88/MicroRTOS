@@ -1,0 +1,242 @@
+---
+title: Coordinating with event groups
+description: Wait for any of several signals — button, timeout, packet — without juggling multiple semaphores.
+---
+
+A common embedded shape: "wake the task when any of these things
+happens." A button press, a timeout, an incoming packet — any one
+should wake you up.
+
+You **could** do this with multiple semaphores and a tasks-per-event
+fan-in. It works but it's awkward. **Event groups** give you a
+32-bit bitmap that any number of producers can set bits on, and a
+single task can wait on any subset.
+
+## What you'll build
+
+- A **dispatcher task** that waits on three event sources at once and
+  reacts to each.
+- A **fake button ISR** that sets `EVT_BUTTON`.
+- A **periodic timeout** that sets `EVT_TIMEOUT` every 1 s.
+- A **fake packet ISR** that sets `EVT_PACKET`.
+
+## What you'll learn
+
+- The any-of vs all-of wait modes.
+- The `clear_on_exit` semantics.
+- When event groups beat semaphores or task notifications.
+
+## Hardware
+
+Arduino Uno. Pin 13 LED as the status indicator. Optional: a button on
+pin 2 — we'll simulate one with a Timer1 fake-press in case you don't
+have hardware.
+
+## Step-by-step
+
+<Steps>
+
+<Step>
+
+**Define the event bits and the event group.**
+
+```c
+#include "micrortos.h"
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
+#define EVT_BUTTON  (1U << 0)
+#define EVT_TIMEOUT (1U << 1)
+#define EVT_PACKET  (1U << 2)
+#define EVT_ALL     (EVT_BUTTON | EVT_TIMEOUT | EVT_PACKET)
+
+static mr_event_t events;
+```
+
+</Step>
+
+<Step>
+
+**Fake button ISR — fires roughly every 700 ms** to simulate a press.
+In real code this would be an INT0/INT1 pin-change ISR.
+
+```c
+static void fake_button_init(void) {
+    /* Timer1 CTC, compare every ~700 ms at 16 MHz / 1024 prescaler. */
+    TCCR1A = 0;
+    TCCR1B = (1 << WGM12) | (1 << CS12) | (1 << CS10);
+    OCR1A  = 10937;                /* ≈ 700 ms */
+    TIMSK1 = (1 << OCIE1A);
+}
+
+ISR(TIMER1_COMPA_vect) {
+    bool yield;
+    mr_event_set_from_isr(&events, EVT_BUTTON, &yield);
+}
+```
+
+</Step>
+
+<Step>
+
+**Fake packet ISR — fires every 300 ms** to simulate a UART packet.
+For brevity we reuse Timer2.
+
+```c
+static void fake_packet_init(void) {
+    /* Timer2 CTC, ~300 ms at 16 MHz / 1024. */
+    TCCR2A = (1 << WGM21);
+    TCCR2B = (1 << CS22) | (1 << CS21) | (1 << CS20);
+    OCR2A  = 234;                  /* ≈ 15 ms × N */
+    TIMSK2 = (1 << OCIE2A);
+}
+
+static volatile uint16_t pkt_counter = 0;
+
+ISR(TIMER2_COMPA_vect) {
+    pkt_counter++;
+    if (pkt_counter >= 20) {       /* once every 20 ticks = ~300 ms */
+        pkt_counter = 0;
+        bool yield;
+        mr_event_set_from_isr(&events, EVT_PACKET, &yield);
+    }
+}
+```
+
+</Step>
+
+<Step>
+
+**Dispatcher task — waits for any event.**
+
+```c
+static mr_tcb_t  dispatcher_tcb;
+static uint8_t   dispatcher_stack[192];
+
+static void dispatcher_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB5);
+
+    uint32_t next_timeout = mr_tick_get();
+
+    while (1) {
+        /* Compute how long until next periodic EVT_TIMEOUT. */
+        int32_t left = (int32_t)(next_timeout - mr_tick_get());
+        uint32_t wait = (left <= 0) ? 0 : (uint32_t)left;
+
+        uint32_t fired = mr_event_wait(
+            &events,
+            EVT_BUTTON | EVT_PACKET,
+            /* wait_all      */ false,
+            /* clear_on_exit */ true,
+            wait
+        );
+
+        /* Was it a timeout? */
+        if (fired == 0) {
+            handle_timeout();
+            next_timeout = mr_tick_get() + MR_MS_TO_TICKS(1000);
+            continue;
+        }
+
+        if (fired & EVT_BUTTON) handle_button();
+        if (fired & EVT_PACKET) handle_packet();
+
+        PORTB ^= (1 << PB5);       /* visible activity */
+    }
+}
+
+static void handle_button(void)  { /* user code */ }
+static void handle_packet(void)  { /* user code */ }
+static void handle_timeout(void) { /* user code */ }
+```
+
+The `clear_on_exit = true` consumes the bits as we observe them, so a
+slow producer doesn't keep waking us in a tight loop. **Without
+`clear_on_exit`**, you'd need to call `mr_event_clear` manually after
+processing — error-prone.
+
+</Step>
+
+<Step>
+
+**Wire everything up.**
+
+```c
+int main(void) {
+    mr_kernel_init();
+    mr_event_init(&events);
+
+    fake_button_init();
+    fake_packet_init();
+
+    mr_task_create(&dispatcher_tcb, "dispatcher", dispatcher_task, NULL, 2,
+                   dispatcher_stack, sizeof(dispatcher_stack));
+
+    mr_kernel_start();
+}
+```
+
+</Step>
+
+</Steps>
+
+## Verify
+
+Pin 13 LED toggles every time the dispatcher handles an event.
+Expected rates:
+
+- `EVT_BUTTON` fires every ~700 ms.
+- `EVT_PACKET` fires every ~300 ms.
+- `EVT_TIMEOUT` fires every 1 s.
+
+That's roughly 700 + 300 + 1000 ÷ 3 ≈ 5 toggles per second — a visible
+~5 Hz blink, not perfectly regular.
+
+## any-of vs all-of
+
+You picked **any-of** (`wait_all = false`) because the dispatcher
+reacts to whichever event fires first.
+
+Use **all-of** (`wait_all = true`) when you need a barrier:
+
+```c
+/* Wait for both halves of a fragmented packet. */
+mr_event_wait(&events,
+              FRAG_HEADER | FRAG_PAYLOAD,
+              /* wait_all */ true,
+              /* clear    */ true,
+              MR_WAIT_FOREVER);
+```
+
+This is the classic "fan-in / barrier" pattern for parallel
+sub-operations.
+
+## When NOT to use event groups
+
+If you only ever wait on **one** condition, a semaphore or task
+notification is simpler. Event groups shine when you have **multiple
+independent producers** and a **single waiter**.
+
+For the inverse (one producer, many waiters), event groups also work —
+when you set a bit, every task waiting on it gets woken.
+
+## Try this next
+
+- **Add EVT_ERROR.** A 4th bit that, when set, causes the dispatcher
+  to skip normal handling and call an error routine. Where does the
+  bit get set?
+- **Combine wait modes.** Wait for `(EVT_HEADER & EVT_PAYLOAD)` OR
+  `EVT_ERROR` — i.e. either both halves of a packet arrived, or
+  something blew up. (Hint: you can't express that in one
+  `mr_event_wait` call. Why?)
+- **No clear_on_exit.** Set `clear_on_exit = false` and observe what
+  happens. Add an explicit `mr_event_clear` to fix it.
+
+## See also
+
+<Cards>
+  <Card title="Event API" href="/docs/api/event" description="Full event-group API surface." />
+  <Card title="Semaphore tutorial" href="/docs/tutorials/isr-signaling" description="Simpler — single-signal case." />
+  <Card title="Synchronization" href="/docs/concepts/synchronization" description="Choosing the right primitive." />
+</Cards>

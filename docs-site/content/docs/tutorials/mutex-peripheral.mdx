@@ -1,0 +1,245 @@
+---
+title: Sharing a peripheral with a mutex
+description: Two tasks need the SPI bus. Serialize them safely with priority-inheritance mutexes.
+---
+
+A common scenario: a sensor task needs the SPI bus to read an
+accelerometer, and a logger task needs the same bus to write to an SD
+card. If they collide mid-transaction, the result is garbage at best,
+silent corruption at worst.
+
+Mutexes serialize access. MicroRTOS mutexes are **recursive** (you can
+lock your own mutex N times) and implement **priority inheritance** to
+prevent unbounded priority inversion.
+
+## What you'll build
+
+- A **sensor task** (priority 1) that reads a value over SPI every 100 ms.
+- A **logger task** (priority 3) that "writes" longer messages over the
+  same SPI bus every 500 ms.
+- A **`spi_mutex`** that serializes access — neither task can clobber
+  the other's transaction.
+
+We simulate SPI with a stub function so you don't need actual hardware.
+The principle is identical for real SPI/I²C/UART/anything shared.
+
+## What you'll learn
+
+- When to reach for a mutex vs a semaphore vs a critical section.
+- How to scope locks tightly (lock late, unlock early).
+- What priority inheritance does and when it kicks in.
+
+## Hardware
+
+Arduino Uno or anything that runs the AVR port. No actual SPI required
+— we stub it out.
+
+## Step-by-step
+
+<Steps>
+
+<Step>
+
+**Declare a shared mutex.** Static allocation, like everything else.
+
+```c
+#include "micrortos.h"
+#include <avr/io.h>
+
+static mr_mutex_t spi_mutex;
+```
+
+</Step>
+
+<Step>
+
+**Write a SPI stub.** Pretend it takes a few ms — that's where
+contention happens.
+
+```c
+static volatile uint16_t spi_state = 0xAAAA;
+
+static uint16_t spi_xfer(uint16_t out) {
+    /* Critical: this function MUST NOT be interrupted by another
+     * SPI transaction. The mutex around it provides that guarantee. */
+    uint16_t in = spi_state;
+    spi_state = out;
+    for (volatile uint16_t i = 0; i < 2000; i++) { } /* fake ~1 ms */
+    return in;
+}
+```
+
+</Step>
+
+<Step>
+
+**Sensor task — locks the mutex around the bus access.**
+
+```c
+static mr_tcb_t  sensor_tcb;
+static uint8_t   sensor_stack[160];
+
+static void sensor_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB4);
+
+    while (1) {
+        /* Acquire the bus. If the logger holds it, we block. */
+        if (mr_mutex_lock(&spi_mutex, MR_MS_TO_TICKS(50)) == MR_OK) {
+            uint16_t reading = spi_xfer(0x0001);   /* "read accel" */
+            mr_mutex_unlock(&spi_mutex);
+
+            /* Use the reading outside the critical section. */
+            if (reading > 0x8000) PORTB |= (1 << PB4);
+            else                  PORTB &= ~(1 << PB4);
+        } else {
+            /* Timed out — peripheral busy. Skip this cycle. */
+        }
+
+        mr_task_delay(MR_MS_TO_TICKS(100));
+    }
+}
+```
+
+Note the pattern: lock → minimal work → unlock → use result outside.
+**Don't hold the mutex across `mr_task_delay`** or any long computation.
+
+</Step>
+
+<Step>
+
+**Logger task — also locks the mutex.**
+
+```c
+static mr_tcb_t  logger_tcb;
+static uint8_t   logger_stack[160];
+
+static void logger_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB5);
+
+    while (1) {
+        mr_mutex_lock(&spi_mutex, MR_WAIT_FOREVER);
+
+        /* Pretend to write a longer message — three transactions. */
+        spi_xfer(0xCAFE);
+        spi_xfer(0xBABE);
+        spi_xfer(0xDEAD);
+
+        mr_mutex_unlock(&spi_mutex);
+
+        PORTB ^= (1 << PB5);     /* visible heartbeat on pin 13 */
+        mr_task_delay(MR_MS_TO_TICKS(500));
+    }
+}
+```
+
+We use `MR_WAIT_FOREVER` here because the logger is OK to wait — it's
+not on a hard deadline.
+
+</Step>
+
+<Step>
+
+**Wire it up in `main`.**
+
+```c
+int main(void) {
+    mr_kernel_init();
+    mr_mutex_init(&spi_mutex);
+
+    mr_task_create(&sensor_tcb, "sensor", sensor_task, NULL, 1,
+                   sensor_stack, sizeof(sensor_stack));
+    mr_task_create(&logger_tcb, "logger", logger_task, NULL, 3,
+                   logger_stack, sizeof(logger_stack));
+
+    mr_kernel_start();
+}
+```
+
+</Step>
+
+</Steps>
+
+## Verify
+
+- Pin 13 (logger) toggles every ~500 ms.
+- Pin 12 (sensor) tracks the simulated reading — toggling roughly every
+  100 ms, occasionally skipping a beat when the logger holds the bus
+  for its 3 ms transaction.
+
+If you remove the mutex calls — both tasks bash the same shared state —
+you'll see `spi_state` corrupted (sensor reads garbage).
+
+## What priority inheritance does
+
+Imagine a third "middle" task:
+
+```c
+static mr_tcb_t middle_tcb;
+static uint8_t  middle_stack[160];
+
+static void middle_task(void *arg) {
+    (void)arg;
+    while (1) {
+        for (volatile uint32_t i = 0; i < 50000; i++) { }  /* busy work */
+        mr_task_delay(MR_MS_TO_TICKS(50));
+    }
+}
+```
+
+Create it at priority 2 (between sensor=1 and logger=3).
+
+Now:
+
+- Logger (3) acquires `spi_mutex` and starts its 3 ms transaction.
+- Sensor (1, **higher priority**) tries to lock the mutex → blocks.
+- Middle (2) is ready and ordinarily would preempt the logger.
+
+**Without PI**: middle preempts logger → logger never finishes → mutex
+never released → sensor waits forever. Unbounded inversion.
+
+**With PI**: when sensor blocks on logger's mutex, the kernel boosts
+logger to priority 1 (sensor's priority). Middle can no longer preempt
+logger. Logger finishes, releases, drops back to priority 3. Sensor
+acquires, runs.
+
+The kernel does this automatically. You don't write any extra code.
+
+## Anti-patterns
+
+<Callout type="warn">
+
+**Don't lock a mutex in an ISR.** ISRs can't block. If you need an ISR
+to coordinate with a task, use a [semaphore](/docs/tutorials/isr-signaling)
+or [task notification](/docs/api/notifications).
+
+**Don't hold a mutex across a long operation.** If your "work inside
+the lock" includes a `delay`, a wait on another mutex, or anything
+slow, restructure to copy what you need under the lock and do slow
+work after release.
+
+**Don't use a mutex to signal.** Mutexes are for serializing access to
+a resource — one path, exclusive use. If your intent is "wake me when
+X happens," use a semaphore.
+
+</Callout>
+
+## Try this next
+
+- **Try `mr_mutex_try_lock`.** Make the sensor task skip the cycle
+  entirely if the bus is busy, without any timeout. When would you
+  want this?
+- **Watch the priority boost in action.** Print task priority from
+  the sensor task before and after acquiring the mutex (use
+  `mr_task_get_current()->priority`).
+- **Three-way contention.** Add a third task that wants the bus at
+  priority 2. Trace through what happens when all three contend.
+
+## See also
+
+<Cards>
+  <Card title="Mutex API" href="/docs/api/mutex" description="All functions, options, and edge cases." />
+  <Card title="Synchronization concept" href="/docs/concepts/synchronization" description="When to use mutex vs sem vs event group vs notification." />
+  <Card title="ISR signaling" href="/docs/tutorials/isr-signaling" description="The other side: when you can't block." />
+</Cards>

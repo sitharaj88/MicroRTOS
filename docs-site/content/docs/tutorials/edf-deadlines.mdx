@@ -1,0 +1,245 @@
+---
+title: Hard real-time with EDF
+description: Earliest Deadline First scheduling for periodic tasks with hard deadlines.
+---
+
+Fixed-priority scheduling is great for most embedded code. But when
+you have a periodic task set with **hard deadlines** and known WCETs
+(worst-case execution times), **EDF** is provably optimal: it can
+schedule any set with total utilization ≤ 100 % that fixed priority
+can't.
+
+## What you'll build
+
+Two periodic tasks with EDF parameters:
+
+| Task | Period | Deadline | WCET |
+|---|---|---|---|
+| Sensor | 50 ms | 40 ms | 5 ms |
+| Control loop | 100 ms | 100 ms | 30 ms |
+
+Utilization = 5/50 + 30/100 = 0.40 = **40 %** — well under capacity, so
+both tasks should meet every deadline.
+
+## What you'll learn
+
+- How `mr_deadline_task_create` registers a task with EDF parameters.
+- Why every iteration must end with `mr_deadline_job_complete`.
+- How to use admission control and deadline-miss callbacks.
+
+## Hardware
+
+Arduino Uno. Two LEDs visible (pin 13 + pin 12 or just pin 13).
+
+## Step-by-step
+
+<Steps>
+
+<Step>
+
+**Enable EDF.** Either in `mr_config.h` or via the Makefile flag:
+
+```bash
+make example8       # has -DMR_USE_EDF_SCHEDULER=1 baked in
+```
+
+For a fresh program, set it before including:
+
+```c
+#define MR_USE_EDF_SCHEDULER 1
+#include "micrortos.h"
+```
+
+</Step>
+
+<Step>
+
+**Declare TCBs and stacks for both tasks.**
+
+```c
+#include <avr/io.h>
+
+static mr_tcb_t  sensor_tcb;
+static uint8_t   sensor_stack[160];
+
+static mr_tcb_t  control_tcb;
+static uint8_t   control_stack[192];
+
+static volatile uint16_t sensor_jobs;
+static volatile uint16_t control_jobs;
+static volatile uint16_t deadline_misses;
+```
+
+</Step>
+
+<Step>
+
+**Sensor task — 5 ms of work, then declare done.**
+
+```c
+static void sensor_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB5);
+
+    while (1) {
+        /* Pretend: read accel, filter, store. */
+        PORTB ^= (1 << PB5);
+        for (volatile uint32_t i = 0; i < 4000; i++) { }  /* ~5 ms */
+        sensor_jobs++;
+
+        /* Tell the scheduler: this job is done. The next release
+         * fires at the next period boundary. */
+        mr_deadline_job_complete();
+    }
+}
+```
+
+The body of an EDF task is just "do one job's worth of work, then call
+`mr_deadline_job_complete`." The scheduler holds the task off until
+the next periodic release.
+
+</Step>
+
+<Step>
+
+**Control task — 30 ms of work.**
+
+```c
+static void control_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB4);
+
+    while (1) {
+        PORTB ^= (1 << PB4);
+        for (volatile uint32_t i = 0; i < 24000; i++) { }  /* ~30 ms */
+        control_jobs++;
+
+        mr_deadline_job_complete();
+    }
+}
+```
+
+</Step>
+
+<Step>
+
+**Miss callback — log deadline overruns.**
+
+```c
+static void on_deadline_miss(mr_deadline_task_t *task) {
+    (void)task;
+    deadline_misses++;
+    /* In real code: set a flag, blink an alarm LED, recover, etc. */
+}
+```
+
+</Step>
+
+<Step>
+
+**Tie it all together.**
+
+```c
+int main(void) {
+    mr_kernel_init();
+    mr_deadline_init();
+
+    mr_task_create(&sensor_tcb, "sensor", sensor_task, NULL, 2,
+                   sensor_stack, sizeof(sensor_stack));
+    mr_task_create(&control_tcb, "control", control_task, NULL, 2,
+                   control_stack, sizeof(control_stack));
+
+    /* period, deadline, wcet (ms) */
+    if (mr_deadline_task_create(&sensor_tcb, 50, 40, 5) != MR_OK) {
+        /* Admission test failed — bad parameter combo. */
+        while (1) { }
+    }
+    if (mr_deadline_task_create(&control_tcb, 100, 100, 30) != MR_OK) {
+        while (1) { }
+    }
+
+    mr_deadline_set_miss_callback(&sensor_tcb, on_deadline_miss);
+    mr_deadline_set_miss_callback(&control_tcb, on_deadline_miss);
+
+    mr_kernel_start();
+}
+```
+
+Note the **admission check** — `mr_deadline_task_create` returns
+`MR_ERR_STATE` if adding the task would push the system over its
+schedulable bound. Bail out loudly in that case; production code
+should never silently accept an over-subscribed schedule.
+
+</Step>
+
+</Steps>
+
+## Verify
+
+- **Pin 13** (sensor) toggles at ~20 Hz — 50 ms period, but you see a
+  toggle once per period so the visible frequency is half: 10 Hz
+  visible, looks like a fast flicker.
+- **Pin 12** (control) toggles at 5 Hz visible (100 ms period).
+- `deadline_misses` should stay at 0 — utilization is 40 %, plenty of
+  margin.
+
+To force misses for testing, bump the control task's busy loop:
+
+```c
+for (volatile uint32_t i = 0; i < 80000; i++) { }  /* ~100 ms */
+```
+
+Now control's WCET (100 ms) **equals** its deadline (100 ms) — any
+preemption pushes it over and the miss callback fires.
+
+## When EDF beats fixed priority
+
+Take this set:
+
+| Task | Period | WCET |
+|---|---|---|
+| A | 10 ms | 6 ms |
+| B | 15 ms | 4 ms |
+
+Utilization = 6/10 + 4/15 = 0.87.
+
+**Rate Monotonic** (fixed-priority, shorter period = higher priority)
+bound: `n × (2^(1/n) - 1)` = 0.828 for n=2. **0.87 > 0.828 → RM may
+miss deadlines.**
+
+**EDF** bound: 1.0. **0.87 < 1.0 → EDF guarantees no misses.**
+
+EDF lets you schedule sets that fixed priority can't.
+
+## Caveats
+
+<Callout type="warn">
+
+- **WCET must be honest.** If your task ever takes longer than `wcet`,
+  the admission test was wrong and you get misses regardless.
+- **EDF doesn't help with sporadic events.** For interrupt-driven work
+  without a known period, fixed priority is still your tool.
+- **One missed deadline → cascading misses.** EDF assumes you complete
+  on time. A task that misses doesn't get its priority reduced, so it
+  can keep stealing CPU and cause more misses. Use the miss callback
+  to recover (skip the next job, reset state, etc.).
+
+</Callout>
+
+## Try this next
+
+- **Add a third task.** Try `(period=200, deadline=100, wcet=20)`.
+  Does it admit? Compute utilization first.
+- **Mix EDF + fixed priority.** Create a third task without calling
+  `mr_deadline_task_create` — it runs at its fixed priority alongside
+  the EDF set.
+- **Tune deadlines.** Drop the sensor's deadline to 6 ms (tighter than
+  its WCET + slack). Does it admit? What does the miss rate look like?
+
+## See also
+
+<Cards>
+  <Card title="EDF API" href="/docs/api/deadline" description="All functions, admission tests, statistics." />
+  <Card title="Scheduler" href="/docs/concepts/scheduler" description="Fixed-priority + EDF coexist; see how." />
+  <Card title="Example 8" href="/docs/examples" description="The runnable EDF demo." />
+</Cards>

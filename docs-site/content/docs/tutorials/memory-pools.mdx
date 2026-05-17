@@ -1,0 +1,204 @@
+---
+title: Memory pools for fixed-block allocation
+description: O(1) deterministic allocation with zero fragmentation — the right way to do dynamic-looking allocation.
+---
+
+`malloc` on embedded is dangerous: heap fragmentation, unpredictable
+allocation time, no upper bound on usage. **Memory pools** give you
+the same "ask for a buffer, free a buffer" feel with deterministic
+timing and a hard upper bound on memory.
+
+## What you'll build
+
+- A **pool of 8 message buffers**, 32 bytes each.
+- A **producer task** that allocates a buffer, fills it, and queues a
+  pointer.
+- A **consumer task** that drains the queue and frees buffers.
+
+This is the **zero-copy** pattern in miniature — the buffer is never
+copied; ownership transfers via pointer.
+
+## What you'll learn
+
+- How a memory pool's free-list works (and why allocation is O(1)).
+- The pattern of pool → queue-of-pointers → consumer-frees.
+- When to use a pool vs `malloc` vs a fixed-size buffer.
+
+## Hardware
+
+Arduino Uno. Pin 13 LED for visualization.
+
+## Step-by-step
+
+<Steps>
+
+<Step>
+
+**Define the buffer type, the pool, and the pointer queue.**
+
+```c
+#include "micrortos.h"
+#include <avr/io.h>
+#include <string.h>
+
+#define BUF_SIZE   32
+#define POOL_SLOTS 8
+
+/* Backing storage for the pool — caller-owned. */
+static uint8_t       pool_memory[BUF_SIZE * POOL_SLOTS];
+static mr_mempool_t  pool;
+
+/* Queue of pointers — exactly POOL_SLOTS deep so producer never
+ * stalls on the queue when pool has buffers available. */
+static uint8_t      *pending_ptrs[POOL_SLOTS];
+static mr_queue_t    pending;
+```
+
+</Step>
+
+<Step>
+
+**Producer task — allocate, fill, enqueue.**
+
+```c
+static mr_tcb_t  producer_tcb;
+static uint8_t   producer_stack[160];
+
+static void producer_task(void *arg) {
+    (void)arg;
+    uint16_t seq = 0;
+
+    while (1) {
+        /* Try to grab a buffer. NO_WAIT so we don't stall the producer
+         * on pool exhaustion — drop instead. */
+        uint8_t *buf = mr_mempool_alloc(&pool, MR_NO_WAIT);
+        if (buf) {
+            /* Fill the buffer with a tiny header + payload. */
+            buf[0] = 0xAA;
+            buf[1] = (uint8_t)seq;
+            memset(&buf[2], (uint8_t)(seq & 0xFF), BUF_SIZE - 2);
+            seq++;
+
+            /* Hand ownership off to the consumer. */
+            if (mr_queue_send(&pending, &buf, MR_NO_WAIT) != MR_OK) {
+                /* Queue full somehow — give the buffer back. */
+                mr_mempool_free(&pool, buf);
+            }
+        } else {
+            /* Pool exhausted — consumer is behind. Drop this sample. */
+        }
+
+        mr_task_delay(MR_MS_TO_TICKS(50));
+    }
+}
+```
+
+The contract: **the producer owns the buffer until it sends; after
+`mr_queue_send` succeeds, the consumer owns it.** No one else may
+touch that buffer.
+
+</Step>
+
+<Step>
+
+**Consumer task — receive, process, free.**
+
+```c
+static mr_tcb_t  consumer_tcb;
+static uint8_t   consumer_stack[192];
+
+static void consumer_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB5);
+
+    while (1) {
+        uint8_t *buf;
+        if (mr_queue_receive(&pending, &buf, MR_WAIT_FOREVER) != MR_OK) {
+            continue;
+        }
+
+        /* Process the buffer (here: visualize first byte's low bit). */
+        if (buf[1] & 0x01) PORTB |=  (1 << PB5);
+        else               PORTB &= ~(1 << PB5);
+
+        /* Simulate a slow consumer to exercise back-pressure. */
+        for (volatile uint32_t i = 0; i < 80000; i++) { }
+
+        /* Give the buffer back to the pool. */
+        mr_mempool_free(&pool, buf);
+    }
+}
+```
+
+</Step>
+
+<Step>
+
+**Wire it up.**
+
+```c
+int main(void) {
+    mr_kernel_init();
+    mr_mempool_init(&pool, pool_memory, BUF_SIZE, POOL_SLOTS);
+    mr_queue_init(&pending, pending_ptrs, sizeof(uint8_t *), POOL_SLOTS);
+
+    mr_task_create(&producer_tcb, "prod", producer_task, NULL, 2,
+                   producer_stack, sizeof(producer_stack));
+    mr_task_create(&consumer_tcb, "cons", consumer_task, NULL, 3,
+                   consumer_stack, sizeof(consumer_stack));
+
+    mr_kernel_start();
+}
+```
+
+</Step>
+
+</Steps>
+
+## Verify
+
+- Pin 13 LED tracks the LSB of the sequence counter — it flips on every
+  other buffer (rate ~5 Hz given the consumer's 200 ms per item).
+- Producer sends every 50 ms; consumer drains every ~200 ms. The pool
+  fills up and the producer starts dropping after ~400 ms.
+
+You can observe the drops by reading `mr_mempool_available(&pool)` —
+when it stays at 0, you're in steady-state drop mode.
+
+## Why a pool is better than `malloc`
+
+| | malloc | mr_mempool |
+|---|---|---|
+| Allocation time | unpredictable (search for free chunk) | constant (pop free list head) |
+| Fragmentation | possible | impossible (all blocks same size) |
+| Upper-bound memory | unbounded | exactly `block_size × count` |
+| Code size | ~1.5 KB on AVR | ~300 B in `mr_mempool.o` |
+
+For embedded, **the predictability matters more than the convenience**.
+
+## Tail-end alignment
+
+`mr_mempool_init` automatically rounds `block_size` up to at least
+`sizeof(void *)` (2 B on AVR, 4–8 B elsewhere) so the free-list
+pointers fit. If you ask for 1-byte blocks, you get 2 bytes each — and
+that's fine, the kernel doesn't lie about the size.
+
+## Try this next
+
+- **Pool stats.** Print `mr_mempool_available(&pool)` from the consumer
+  to see live exhaustion patterns.
+- **Two consumers.** Split the consumer into two tasks at the same
+  priority — both pull from the queue. What changes?
+- **Pool too small.** Drop `POOL_SLOTS` to 2. How many samples per
+  second can the producer push?
+- **Zero-copy with refcounts.** Look at the [zero-copy concept](/docs/concepts/ipc#zero-copy-buffers) —
+  same shape but multiple consumers can share a buffer until the last
+  one frees.
+
+## See also
+
+<Cards>
+  <Card title="Mempool API" href="/docs/api/mempool" description="Full surface, ISR variants, queries." />
+  <Card title="IPC concept" href="/docs/concepts/ipc" description="Pools back zero-copy buffer protocols." />
+  <Card title="Queue tutorial" href="/docs/tutorials/queue-producer-consumer" description="The other half of the pattern — sending messages." />
+</Cards>

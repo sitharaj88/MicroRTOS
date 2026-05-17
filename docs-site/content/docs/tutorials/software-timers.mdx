@@ -1,0 +1,238 @@
+---
+title: Software timers
+description: Periodic blinkers, one-shot debounce, and a soft-watchdog pattern — no extra TCBs needed.
+---
+
+A software timer runs your callback after a delay, optionally
+repeating. All timers share one **timer task** that the kernel creates
+on `mr_kernel_init` — your callbacks run in normal task context, not
+in the tick ISR.
+
+Why this matters: timer callbacks can call any kernel API (block on a
+mutex, send a queue), unlike ISR handlers.
+
+## What you'll build
+
+Three timers running concurrently:
+
+1. **Periodic blinker** — toggles pin 13 every 500 ms.
+2. **One-shot debounce** — re-arms each time the button "presses"
+   (simulated). Fires 20 ms after the latest press.
+3. **Soft watchdog** — a 1 s timer that resets when a worker task
+   checks in. If the worker stalls, the timer fires.
+
+## What you'll learn
+
+- One-shot vs auto-reload semantics.
+- How `mr_timer_reset` implements debounce-style timers.
+- The soft-watchdog pattern.
+
+## Hardware
+
+Arduino Uno. Pin 13 LED. Optional pin 12 LED to observe the debounce.
+
+## Step-by-step
+
+<Steps>
+
+<Step>
+
+**Declare three timers + a fake button trigger.**
+
+```c
+#include "micrortos.h"
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
+static mr_timer_t blink_tmr;
+static mr_timer_t debounce_tmr;
+static mr_timer_t watchdog_tmr;
+```
+
+</Step>
+
+<Step>
+
+**Callback for the periodic blinker.** Auto-reload, fires every
+500 ms.
+
+```c
+static void on_blink(mr_timer_t *t) {
+    (void)t;
+    PORTB ^= (1 << PB5);
+}
+```
+
+</Step>
+
+<Step>
+
+**Callback for the debounce.** Fires once **20 ms after the latest
+"press"** — that's what `mr_timer_reset` lets us do.
+
+```c
+static volatile uint16_t button_handled = 0;
+
+static void on_debounce(mr_timer_t *t) {
+    (void)t;
+    /* This runs once, 20 ms after the *last* mr_timer_reset call. */
+    button_handled++;
+    PORTB ^= (1 << PB4);          /* pin 12 — visible "press accepted" */
+}
+```
+
+</Step>
+
+<Step>
+
+**Callback for the soft watchdog.**
+
+```c
+static volatile bool watchdog_alive = true;
+
+static void on_watchdog(mr_timer_t *t) {
+    (void)t;
+    /* The worker didn't check in for 1 second. */
+    watchdog_alive = false;
+    /* In real code: log, recover, hardware-reset. */
+    DDRB  |=  (1 << PB3);
+    PORTB |=  (1 << PB3);         /* alarm LED on pin 11 */
+}
+```
+
+</Step>
+
+<Step>
+
+**Worker task — checks in every 200 ms.** Resetting the watchdog timer
+keeps it from firing.
+
+```c
+static mr_tcb_t  worker_tcb;
+static uint8_t   worker_stack[160];
+
+static void worker_task(void *arg) {
+    (void)arg;
+    while (1) {
+        /* Pretend to do useful work. */
+        for (volatile uint32_t i = 0; i < 30000; i++) { }
+
+        /* Check in — reset the watchdog. */
+        mr_timer_reset(&watchdog_tmr);
+
+        mr_task_delay(MR_MS_TO_TICKS(200));
+    }
+}
+```
+
+</Step>
+
+<Step>
+
+**Fake "button press" ISR — calls `mr_timer_reset` on the debounce
+timer.**
+
+```c
+static void fake_button_init(void) {
+    /* Timer1 CTC: presses arrive at random-ish intervals 200–800 ms. */
+    TCCR1A = 0;
+    TCCR1B = (1 << WGM12) | (1 << CS12) | (1 << CS10);
+    OCR1A  = 6250;                /* ≈ 400 ms */
+    TIMSK1 = (1 << OCIE1A);
+}
+
+ISR(TIMER1_COMPA_vect) {
+    /* "Press detected" — reset the debounce timer.
+     * It will fire 20 ms after the LATEST press. */
+    mr_timer_reset(&debounce_tmr);
+}
+```
+
+For real debounce on a noisy button, multiple ISRs would fire close
+together; each `mr_timer_reset` pushes the debounce expiration further
+out. Only when the button stops bouncing does the timer actually fire.
+
+</Step>
+
+<Step>
+
+**Initialize timers and start.**
+
+```c
+int main(void) {
+    DDRB |= (1 << PB5) | (1 << PB4);
+
+    mr_kernel_init();
+
+    mr_timer_init(&blink_tmr, "blink", on_blink,
+                  MR_MS_TO_TICKS(500), /* auto_reload */ true);
+    mr_timer_init(&debounce_tmr, "deb", on_debounce,
+                  MR_MS_TO_TICKS(20), /* one-shot */ false);
+    mr_timer_init(&watchdog_tmr, "wd", on_watchdog,
+                  MR_MS_TO_TICKS(1000), /* one-shot */ false);
+
+    mr_timer_start(&blink_tmr);
+    mr_timer_start(&watchdog_tmr);
+    /* debounce isn't started here — only via fake_button_init's ISR */
+
+    fake_button_init();
+
+    mr_task_create(&worker_tcb, "worker", worker_task, NULL, 2,
+                   worker_stack, sizeof(worker_stack));
+
+    mr_kernel_start();
+}
+```
+
+</Step>
+
+</Steps>
+
+## Verify
+
+- **Pin 13** blinks steadily at 1 Hz (500 ms period blink timer).
+- **Pin 12** toggles every ~400 ms — the debounce timer fires 20 ms
+  after each fake "press". With a real bouncy button, you'd see far
+  fewer toggles than presses (which is the whole point).
+- **Pin 11 stays OFF.** That's the watchdog alarm — the worker task is
+  checking in every 200 ms, well under the 1 s timeout.
+
+To force the watchdog to fire, comment out the `mr_timer_reset` call
+in the worker task and reflash. After 1 s, pin 11 turns on and stays
+on.
+
+## When to use which mode
+
+| Mode | Use for |
+|---|---|
+| Periodic (`auto_reload = true`) | Heartbeats, sampling, periodic reports |
+| One-shot (`auto_reload = false`) | Timeouts, debouncing, retry delays |
+| One-shot + `mr_timer_reset` | Debouncing, idle detection (this tutorial) |
+| One-shot + `mr_timer_stop` | Cancel-able timeout (`stop` undoes a `start`) |
+
+## Why not just use tasks?
+
+Software timers are cheaper than dedicated tasks:
+
+- Each timer is ~16 B of state + 12 B list node = **~28 B per timer**.
+- A new task is ~61 B TCB + ≥128 B stack = **~190 B minimum**.
+
+If your "periodic" work is a single 5-line callback, a timer is the
+right tool. If it's a multi-step state machine, give it a task.
+
+## Try this next
+
+- **Cancellable timeout.** Use a one-shot timer to implement a
+  3-second "are you sure?" prompt that cancels if the user confirms.
+- **Adaptive period.** Use `mr_timer_change_period` from inside the
+  callback to slow down a poll loop when nothing changed for a while.
+- **Watchdog cascade.** Add a second watchdog at 5 s that resets the
+  whole system. The 1 s one logs, the 5 s one nukes.
+
+## See also
+
+<Cards>
+  <Card title="Timer API" href="/docs/api/timer" description="All operations and tunables." />
+  <Card title="Timers concept" href="/docs/concepts/timers" description="The timer task, costs, alternatives." />
+  <Card title="Tickless tutorial" href="/docs/tutorials/tickless-low-power" description="When the tick stops, what happens to timers?" />
+</Cards>

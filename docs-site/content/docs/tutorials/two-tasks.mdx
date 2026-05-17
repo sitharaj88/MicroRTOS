@@ -1,0 +1,187 @@
+---
+title: Two tasks at different priorities
+description: Run a fast sensor task alongside a slow UI task — the fundamentals of priority preemption.
+---
+
+This is the first program that does something only an RTOS can:
+**two completely independent activities** running concurrently, each
+keeping its own rhythm. Without an RTOS you'd interleave them by hand
+in a giant `loop()`. With one, each task is just a `while(1)` that
+ignores the other.
+
+## What you'll build
+
+- A **sensor task** that reads (simulated) ADC values every 50 ms and
+  toggles pin 12.
+- A **UI task** that updates the on-board LED on pin 13 every 500 ms.
+- Both tasks visible: the sensor LED on pin 12 blinks at 10 Hz, the
+  UI LED on pin 13 blinks at 1 Hz, simultaneously and independently.
+
+## What you'll learn
+
+- How priority numbers work (lower = higher).
+- How `mr_task_delay` lets the scheduler run other tasks.
+- Why the higher-priority task doesn't starve the lower one when both
+  spend most of their time delayed.
+
+## Hardware
+
+- Arduino Uno (or any AVR target with the AVR port).
+- Built-in LED on pin 13 (always there).
+- Optional: an LED + 220 Ω resistor between pin 12 and ground.
+
+If you don't have a pin-12 LED, the program still runs — you just see
+only the pin-13 LED.
+
+## Step-by-step
+
+<Steps>
+
+<Step>
+
+**Declare two TCBs and two stacks.** Each task needs its own
+control block (saved registers, state, list nodes) and its own stack.
+Both are static — no `malloc`.
+
+```c
+#include "micrortos.h"
+#include <avr/io.h>
+
+static mr_tcb_t  sensor_tcb;
+static uint8_t   sensor_stack[128];
+
+static mr_tcb_t  ui_tcb;
+static uint8_t   ui_stack[128];
+```
+
+</Step>
+
+<Step>
+
+**Write the sensor task.** Toggle pin 12, then sleep 50 ms.
+
+```c
+static void sensor_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB4);                 /* pin 12 output */
+    while (1) {
+        PORTB ^= (1 << PB4);            /* toggle pin 12 */
+        mr_task_delay(MR_MS_TO_TICKS(50));
+    }
+}
+```
+
+The cast `(void)arg` silences "unused parameter" warnings. We never
+return — the kernel doesn't expect tasks to.
+
+</Step>
+
+<Step>
+
+**Write the UI task.** Toggle pin 13, sleep 500 ms.
+
+```c
+static void ui_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB5);                 /* pin 13 output */
+    while (1) {
+        PORTB ^= (1 << PB5);            /* toggle pin 13 */
+        mr_task_delay(MR_MS_TO_TICKS(500));
+    }
+}
+```
+
+</Step>
+
+<Step>
+
+**Create both tasks in `main`.** Sensor gets priority 1 (higher
+priority because it must read more often). UI gets priority 2 (lower).
+
+```c
+int main(void) {
+    mr_kernel_init();
+
+    mr_task_create(&sensor_tcb, "sensor", sensor_task, NULL,
+                   /* priority */ 1,
+                   sensor_stack, sizeof(sensor_stack));
+
+    mr_task_create(&ui_tcb, "ui", ui_task, NULL,
+                   /* priority */ 2,
+                   ui_stack, sizeof(ui_stack));
+
+    mr_kernel_start();                  /* never returns */
+}
+```
+
+<Callout type="info">
+Lower priority number = **higher** priority. Sensor (1) preempts UI (2).
+This matches FreeRTOS convention.
+</Callout>
+
+</Step>
+
+<Step>
+
+**Save, build, flash.**
+
+```bash
+make flash EXAMPLE=YOUR_NUMBER
+```
+
+(Replace `YOUR_NUMBER` with whatever example index you copied this
+into. If you wrote it in-place over `example1`, use `EXAMPLE=1`.)
+
+</Step>
+
+</Steps>
+
+## Verify
+
+| What you see | What it means |
+|---|---|
+| Pin 13 LED blinks at 1 Hz | UI task is running |
+| Pin 12 LED blinks at 10 Hz (or appears dim due to 50 % duty at 10 Hz) | Sensor task is running |
+| Both LEDs steady (on or off) | Bug — likely a stack init issue. See [stack overflow tutorial](/docs/tutorials/debug-stack-overflow). |
+
+The key observation: **the rates are independent**. The sensor task
+runs 10× more often than the UI task, but the UI task isn't starved
+because both spend most of their time blocked in `mr_task_delay`.
+
+## What the scheduler is doing
+
+```
+t=0 ms    sensor starts, toggles pin 12, calls task_delay(50)
+t=0 ms    ui starts (since sensor is now blocked), toggles pin 13,
+          calls task_delay(500)
+t=0 ms    idle runs (both tasks blocked)
+t=50 ms   sensor wakes, runs again (preempts idle), toggles pin 12,
+          task_delay(50)
+t=50 ms   idle runs again
+...
+t=500 ms  ui wakes, toggles pin 13, task_delay(500)
+t=500 ms  sensor still firing every 50 ms in between
+```
+
+The sensor task gets the CPU for about 50 microseconds every 50 ms —
+roughly 0.1 % CPU. The UI task is even smaller. The remaining 99.9 %
+is the idle task. Plenty of headroom for real work.
+
+## Try this next
+
+- **Change priorities.** Swap them — make the UI task priority 1 and
+  the sensor priority 2. What changes? (Hint: not much, because they
+  rarely contend.)
+- **Add a third task.** Read a button on pin 7 every 10 ms and log
+  edges. What priority should it have?
+- **Make the sensor task busy.** Replace `mr_task_delay(50)` with a
+  long computation that takes 30 ms. Now the UI task can be preempted
+  mid-toggle. What happens to the LED behavior?
+
+## See also
+
+<Cards>
+  <Card title="Tasks API" href="/docs/api/tasks" description="Full surface for task lifecycle." />
+  <Card title="Scheduler concept" href="/docs/concepts/scheduler" description="How priority + EDF + context switching works inside the kernel." />
+  <Card title="Mutex tutorial" href="/docs/tutorials/mutex-peripheral" description="When tasks need to share a resource, not just CPU." />
+</Cards>

@@ -1,0 +1,223 @@
+---
+title: ISR-to-task signaling
+description: UART RX interrupt wakes a parser task via a binary semaphore — the canonical ISR signal pattern.
+---
+
+ISRs must be short — they preempt everything below the ISR priority,
+including tasks holding kernel locks. The standard pattern is:
+
+> Do the absolute minimum in the ISR (grab a byte, set a flag), then
+> wake a task to do the real work.
+
+This tutorial wires up the canonical "ISR → semaphore → task" path
+with a fake UART RX interrupt. The same pattern applies to GPIO edges,
+timer captures, DMA completes, and so on.
+
+## What you'll build
+
+- A **producer ISR** (fired by a software trigger to simulate UART RX)
+  that "captures" a byte and gives a binary semaphore.
+- A **consumer task** that waits on the semaphore and processes the byte.
+- An LED on pin 13 that toggles every time a byte is processed.
+
+## What you'll learn
+
+- The `_from_isr` family of kernel calls.
+- The `yield_required` flag and why you honor it on the way out.
+- Why semaphores beat polling for ISR-style events.
+
+## Hardware
+
+Arduino Uno. We fake the UART RX interrupt with a Timer2 compare to
+keep the example self-contained.
+
+## Step-by-step
+
+<Steps>
+
+<Step>
+
+**Declare the shared semaphore + ring buffer.** Binary semaphore
+(`max = 1`) and a small ring buffer for the bytes.
+
+```c
+#include "micrortos.h"
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
+static mr_sem_t rx_sem;
+
+#define RING_SIZE 16
+static volatile uint8_t  rx_buf[RING_SIZE];
+static volatile uint8_t  rx_head;       /* written by ISR */
+static volatile uint8_t  rx_tail;       /* read by task   */
+```
+
+</Step>
+
+<Step>
+
+**Set up the fake "RX" ISR.** We use Timer2 compare-A to fire every 5
+ms — pretending a byte arrived.
+
+```c
+static void fake_uart_init(void) {
+    /* Timer2 CTC mode, prescaler 1024, compare at 78 → ~5 ms. */
+    TCCR2A = (1 << WGM21);
+    OCR2A  = 78;
+    TIMSK2 = (1 << OCIE2A);
+    TCCR2B = (1 << CS22) | (1 << CS21) | (1 << CS20);
+}
+
+ISR(TIMER2_COMPA_vect) {
+    static uint8_t counter = 0;
+    /* Pretend we just read UDR0 into local 'byte' */
+    uint8_t byte = 'A' + (counter++ & 0x1F);
+
+    /* Push into the ring buffer (ISR is the only writer of head) */
+    uint8_t next = (rx_head + 1) % RING_SIZE;
+    if (next != rx_tail) {              /* not full */
+        rx_buf[rx_head] = byte;
+        rx_head = next;
+    }
+
+    /* Wake the parser task */
+    bool yield = false;
+    mr_sem_give_from_isr(&rx_sem, &yield);
+    /* The port layer honors `yield` automatically on AVR. */
+}
+```
+
+<Callout type="warn">
+**`_from_isr` is required here.** The regular `mr_sem_give` would
+attempt to interact with the scheduler in a way that's only safe from
+task context. Always use the ISR variant from an ISR.
+</Callout>
+
+</Step>
+
+<Step>
+
+**Write the parser task.** It waits on the semaphore, then drains the
+ring buffer (there might be multiple bytes if the task got scheduled
+later than the first byte's arrival).
+
+```c
+static mr_tcb_t  parser_tcb;
+static uint8_t   parser_stack[192];
+
+static void parser_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB5);
+
+    while (1) {
+        /* Block until at least one byte has arrived. */
+        if (mr_sem_take(&rx_sem, MR_WAIT_FOREVER) != MR_OK) continue;
+
+        /* Drain ALL pending bytes — semaphore signals "≥1 ready",
+         * not "exactly one ready". */
+        while (rx_tail != rx_head) {
+            uint8_t b = rx_buf[rx_tail];
+            rx_tail = (rx_tail + 1) % RING_SIZE;
+
+            process_byte(b);
+            PORTB ^= (1 << PB5);        /* visible heartbeat */
+        }
+    }
+}
+
+static void process_byte(uint8_t b) {
+    (void)b;
+    /* Parse, log, push downstream — your real handler goes here. */
+}
+```
+
+The drain-the-whole-buffer pattern is important: if the task wakes
+after multiple ISR fires, you want to process them all, not just one.
+
+</Step>
+
+<Step>
+
+**Tie it together in `main`.**
+
+```c
+int main(void) {
+    mr_kernel_init();
+    mr_sem_init(&rx_sem, /* max */ 1, /* initial */ 0);
+    fake_uart_init();                   /* turns ISRs on */
+
+    mr_task_create(&parser_tcb, "parser", parser_task, NULL, 2,
+                   parser_stack, sizeof(parser_stack));
+
+    mr_kernel_start();
+}
+```
+
+</Step>
+
+</Steps>
+
+## Verify
+
+- Pin 13 LED toggles roughly every 5 ms — once per "received byte".
+- It will look like a fast flicker (around 100 Hz) — too fast to count
+  by eye but visibly dim.
+
+If the LED doesn't toggle, the most likely cause is that Timer2's ISR
+isn't firing. Check `TIMSK2` got written **after** the kernel started
+(or move `fake_uart_init` to **after** `mr_kernel_init`).
+
+## Why a semaphore (and not a queue)?
+
+A queue copies the byte itself. Here, the ring buffer already exists
+(the application's natural rx buffer) and copying again would be
+wasteful. The semaphore just signals "drain me." This is the
+**signal pattern**.
+
+Use a queue when:
+- The ISR genuinely produces a structured event you want to deliver
+  (e.g. a parsed key code, an ADC sample).
+- You don't already have a buffer.
+
+Use a semaphore when:
+- The ISR's output already lives somewhere (DMA buffer, ring buffer).
+- The signal is just "there's data waiting."
+
+## `yield_required` — what is it?
+
+When you call `mr_sem_give_from_isr(&sem, &yield)`, the kernel sets
+`yield` to **true** if waking the waiter made it the highest-priority
+ready task. That means a context switch should happen before the ISR
+returns — otherwise you'd return to the previously interrupted task,
+adding latency.
+
+On the AVR port the ISR exit path already calls
+`rtos_scheduler_switch_context()` unconditionally, so `yield` is
+informational only. On ports where this isn't true, you'd write:
+
+```c
+if (yield) rtos_port_request_switch_from_isr();
+```
+
+Or, if you want maximum portability, always treat it as a request and
+make the port handle it.
+
+## Try this next
+
+- **Replace the semaphore with a queue** of bytes. Now you don't need
+  the separate ring buffer. Trade-offs?
+- **Use task notifications** (`mr_task_notify_value` with
+  `MR_NOTIFY_INCREMENT`). Now the task knows exactly how many bytes
+  arrived. When would you prefer this?
+- **Drop bytes intentionally on overflow.** The ring-buffer "if not
+  full" branch is the drop policy. What happens visibly if you remove
+  it?
+
+## See also
+
+<Cards>
+  <Card title="Semaphore API" href="/docs/api/semaphore" description="Full surface for binary and counting semaphores." />
+  <Card title="Task notifications" href="/docs/api/notifications" description="Even lighter for one-to-one signal." />
+  <Card title="Queue tutorial" href="/docs/tutorials/queue-producer-consumer" description="When you want the ISR to deliver structured events." />
+</Cards>

@@ -1,0 +1,235 @@
+---
+title: Sequential logic with async/await coroutines
+description: Run state machines that yield without a full TCB — perfect for I/O sequences and protocol parsers.
+---
+
+A coroutine is a function that can pause partway through and resume
+where it left off. In MicroRTOS, the `ASYNC_*` macros (Duff's-device
+trick under the hood) give you exactly that — sequential-looking code
+that yields back to the scheduler without burning a full task.
+
+Why care? **Each task costs at least 61 B TCB + 128 B stack = ~190 B
+SRAM**. If you have 8 small state machines (button debouncers, LED
+animations, protocol parsers), that's 1.5 KB you might not have. With
+coroutines, you can run dozens of them inside a single task.
+
+## What you'll build
+
+A 4-state LED animation:
+
+1. LED on for 100 ms.
+2. LED off for 100 ms.
+3. LED on for 400 ms (long pulse).
+4. LED off for 400 ms.
+
+Then it loops. **All as one coroutine, running inside one task.**
+
+## What you'll learn
+
+- The `ASYNC_BEGIN` / `ASYNC_END` framing.
+- `ASYNC_DELAY_MS` — yields without blocking.
+- When coroutines beat tasks (and when they don't).
+
+## Hardware
+
+Arduino Uno. Pin 13 LED.
+
+## Step-by-step
+
+<Steps>
+
+<Step>
+
+**Include the async macros.**
+
+```c
+#include "micrortos.h"
+#include "mr_async.h"             /* needed for ASYNC_* macros */
+#include <avr/io.h>
+```
+
+</Step>
+
+<Step>
+
+**Write the coroutine.** It looks like a normal function with a few
+macros sprinkled in.
+
+```c
+static mr_async_status_t blink_pattern(mr_async_state_t *state, void *arg) {
+    (void)arg;
+
+    ASYNC_BEGIN(state);                  /* always first */
+
+        PORTB |=  (1 << PB5);            /* LED on */
+        ASYNC_DELAY_MS(state, 100);
+
+        PORTB &= ~(1 << PB5);            /* LED off */
+        ASYNC_DELAY_MS(state, 100);
+
+        PORTB |=  (1 << PB5);            /* LED on */
+        ASYNC_DELAY_MS(state, 400);
+
+        PORTB &= ~(1 << PB5);            /* LED off */
+        ASYNC_DELAY_MS(state, 400);
+
+    ASYNC_END(state);                    /* always last */
+}
+```
+
+How does this work? `ASYNC_BEGIN(state)` is a `switch (state->line)`.
+Every `ASYNC_DELAY_MS` macro:
+
+1. Records the current `__LINE__` in `state->line`.
+2. Returns `MR_ASYNC_PENDING` to the caller.
+3. Next call jumps via `case __LINE__:` back to where it left off.
+
+The trick (Duff's device) means you can pause in the middle of a
+function and resume mid-function. **Local variables don't survive
+across yields** — anything you need across a yield must go in `arg`
+or a global.
+
+</Step>
+
+<Step>
+
+**Driver task — repeatedly polls the coroutine.**
+
+```c
+static mr_tcb_t  driver_tcb;
+static uint8_t   driver_stack[160];
+
+static void driver_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB5);
+
+    mr_async_state_t state;
+    mr_async_init(&state);
+
+    while (1) {
+        mr_async_status_t s = blink_pattern(&state, NULL);
+
+        if (s == MR_ASYNC_DONE) {
+            /* Coroutine finished — restart it. */
+            mr_async_reset(&state);
+        }
+
+        /* Step the coroutine every 10 ms — gives ASYNC_DELAY_MS its
+         * tick granularity. */
+        mr_task_delay(MR_MS_TO_TICKS(10));
+    }
+}
+```
+
+The 10 ms step rate determines the precision of `ASYNC_DELAY_MS`.
+Smaller = more accurate but more CPU; larger = less CPU but coarser
+timing.
+
+</Step>
+
+<Step>
+
+**Wire it up.**
+
+```c
+int main(void) {
+    mr_kernel_init();
+    mr_task_create(&driver_tcb, "drv", driver_task, NULL, 2,
+                   driver_stack, sizeof(driver_stack));
+    mr_kernel_start();
+}
+```
+
+</Step>
+
+</Steps>
+
+## Verify
+
+LED pattern: short blink, short blink, long blink, long blink, repeat.
+One full cycle takes ~1 second.
+
+If the LED stays on or off, the most likely cause is a coroutine that
+"falls off the end" — make sure every path through `blink_pattern`
+eventually calls `ASYNC_END`.
+
+## When to use coroutines vs tasks
+
+**Use coroutines when:**
+
+- You have many small state machines (button handlers, LED animations,
+  per-channel protocol parsers).
+- Memory is tight and you can't afford a TCB+stack per machine.
+- The logic is naturally sequential: "do A, wait, do B, wait, do C".
+
+**Use tasks when:**
+
+- The machine has multiple long blocking calls (mutexes, queues with
+  waits, sub-task synchronization).
+- You need priority-based preemption between machines.
+- Local variables surviving across yields would be painful to track.
+
+A common pattern: **one task that runs N coroutines round-robin**. The
+task is your scheduling unit; the coroutines are your logic units.
+
+## Multiple coroutines in one task
+
+```c
+static mr_async_state_t led_state;
+static mr_async_state_t button_state;
+static mr_async_state_t modem_state;
+
+static void poll_task(void *arg) {
+    mr_async_init(&led_state);
+    mr_async_init(&button_state);
+    mr_async_init(&modem_state);
+
+    while (1) {
+        if (led_animation(&led_state, NULL) == MR_ASYNC_DONE)
+            mr_async_reset(&led_state);
+
+        if (button_handler(&button_state, NULL) == MR_ASYNC_DONE)
+            mr_async_reset(&button_state);
+
+        modem_protocol(&modem_state, NULL);   /* runs until DONE on its own */
+
+        mr_task_delay(MR_MS_TO_TICKS(5));
+    }
+}
+```
+
+Three concurrent state machines in **one task + one stack** = a fraction
+of the SRAM cost of three real tasks.
+
+## Limits
+
+<Callout type="warn">
+
+- **No local-variable persistence across yields.** Use `arg` for
+  long-lived state. If you forget, the compiler **won't** warn —
+  you'll get a silently wrong value after resume.
+- **No nesting.** A coroutine can't call another coroutine with its
+  own state. (You can pass the inner state in and call the inner
+  function directly — that works.)
+- **Same task is the cooperator.** Coroutines don't preempt each
+  other; they yield. A misbehaving coroutine (long busy loop)
+  starves the others in the same task.
+
+</Callout>
+
+## Try this next
+
+- **Add a button-debounce coroutine** running in the same task.
+  Use `mr_async_state_t` for each.
+- **Pass shared state via `arg`.** A struct with current intensity,
+  pattern phase, etc.
+- **Read the macro source.** Open `include/mr_async.h` and trace how
+  `ASYNC_DELAY_MS` expands. It's a great exercise in C-preprocessor
+  tricks.
+
+## See also
+
+<Cards>
+  <Card title="Example 7" href="/docs/examples" description="The runnable async demo." />
+  <Card title="Tasks tutorial" href="/docs/tutorials/two-tasks" description="When you want real preemption, not cooperation." />
+</Cards>

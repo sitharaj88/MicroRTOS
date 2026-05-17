@@ -1,0 +1,215 @@
+---
+title: Producer / consumer with a queue
+description: A sensor task pushes readings into a queue; a writer task drains them. Back-pressure handled.
+---
+
+When one task produces structured events and another consumes them,
+the right primitive is a **message queue**. The queue handles the
+synchronization and the buffering — you just `send` and `receive`.
+
+## What you'll build
+
+- A **sensor task** that produces a struct (timestamp + value) every
+  100 ms and pushes it into a queue.
+- A **writer task** that pulls structs from the queue and "writes"
+  them (we just toggle pin 13 to visualize).
+- A queue capacity of **4**, deliberately small so we can see what
+  happens when it fills.
+
+## What you'll learn
+
+- The copy-in / copy-out semantics of `mr_queue_*`.
+- How blocking and timeouts handle back-pressure.
+- When to choose a queue vs zero-copy IPC vs a semaphore.
+
+## Hardware
+
+Arduino Uno. Pin 13 LED is sufficient.
+
+## Step-by-step
+
+<Steps>
+
+<Step>
+
+**Define the message type.** Plain structs are fine — they get
+**copied** into the queue's internal buffer, so no pointer-lifetime
+worries.
+
+```c
+#include "micrortos.h"
+#include <avr/io.h>
+
+typedef struct {
+    uint32_t timestamp;
+    uint16_t value;
+} reading_t;
+```
+
+</Step>
+
+<Step>
+
+**Allocate the queue's backing buffer + a `mr_queue_t`.** The buffer
+must hold `capacity × sizeof(item)` bytes.
+
+```c
+#define QUEUE_CAPACITY 4
+
+static reading_t   queue_storage[QUEUE_CAPACITY];
+static mr_queue_t  readings;
+```
+
+Even though it looks like an array of `reading_t`, the queue treats it
+as a flat byte buffer. The kernel handles the indexing.
+
+</Step>
+
+<Step>
+
+**Sensor task — produces every 100 ms.**
+
+```c
+static mr_tcb_t  sensor_tcb;
+static uint8_t   sensor_stack[160];
+
+static void sensor_task(void *arg) {
+    (void)arg;
+
+    while (1) {
+        reading_t r = {
+            .timestamp = mr_tick_get(),
+            .value     = (uint16_t)(mr_tick_get() & 0x03FF),
+        };
+
+        /* Non-blocking send. If queue is full, drop the sample and
+         * carry on. (Alternative: MR_WAIT_FOREVER to back-pressure.) */
+        mr_status_t s = mr_queue_send(&readings, &r, MR_NO_WAIT);
+        if (s == MR_ERR_FULL) {
+            /* Optionally: track dropped count, blink an LED, etc. */
+        }
+
+        mr_task_delay(MR_MS_TO_TICKS(100));
+    }
+}
+```
+
+We use `MR_NO_WAIT` here because **dropping** when the consumer can't
+keep up is the right policy for a real-time sensor. Choose your back-
+pressure policy deliberately.
+
+</Step>
+
+<Step>
+
+**Writer task — slow consumer, simulates flash write.**
+
+```c
+static mr_tcb_t  writer_tcb;
+static uint8_t   writer_stack[192];
+
+static void writer_task(void *arg) {
+    (void)arg;
+    DDRB |= (1 << PB5);
+
+    while (1) {
+        reading_t r;
+
+        /* Block forever waiting for next reading. */
+        if (mr_queue_receive(&readings, &r, MR_WAIT_FOREVER) == MR_OK) {
+            /* Simulate a 150 ms "write" — slower than the producer. */
+            for (volatile uint32_t i = 0; i < 100000; i++) { }
+            PORTB ^= (1 << PB5);
+        }
+    }
+}
+```
+
+Notice the consumer is slower (~150 ms per record) than the producer
+(~100 ms per record). That's intentional — it's how we observe the
+queue's behavior.
+
+</Step>
+
+<Step>
+
+**Wire it up.**
+
+```c
+int main(void) {
+    mr_kernel_init();
+    mr_queue_init(&readings, queue_storage,
+                  sizeof(reading_t), QUEUE_CAPACITY);
+
+    mr_task_create(&sensor_tcb, "sensor", sensor_task, NULL, 2,
+                   sensor_stack, sizeof(sensor_stack));
+    mr_task_create(&writer_tcb, "writer", writer_task, NULL, 3,
+                   writer_stack, sizeof(writer_stack));
+
+    mr_kernel_start();
+}
+```
+
+</Step>
+
+</Steps>
+
+## Verify
+
+After flashing, observe pin 13:
+
+- For the first ~600 ms: blink at 150 ms intervals (writer's natural
+  pace; queue isn't full yet).
+- After that: blink stays at 150 ms intervals (writer's pace caps the
+  visible rate), and the sensor task starts dropping samples.
+
+If you change the send policy to `MR_WAIT_FOREVER`, the sensor task
+will block when the queue fills. The writer drains at 150 ms intervals;
+the sensor is effectively rate-limited to 150 ms intervals too — the
+queue back-pressures end-to-end.
+
+## Counting drops
+
+Add a counter to see how often you drop:
+
+```c
+static volatile uint16_t dropped = 0;
+
+if (mr_queue_send(&readings, &r, MR_NO_WAIT) == MR_ERR_FULL) {
+    dropped++;
+}
+```
+
+After a few seconds you'll see `dropped` climb. That's your visibility
+into back-pressure.
+
+## When to use queues vs alternatives
+
+| Scenario | Use |
+|---|---|
+| Small structured events at moderate rate | **Queue** (copy in/out is fine) |
+| Large payloads (>32 B) or high rate | [Zero-copy IPC](/docs/concepts/ipc#zero-copy-buffers) — transfer pointers |
+| Pure "something happened, no data" | [Semaphore](/docs/tutorials/isr-signaling) or task notification |
+| Multiple conditions to wait on | [Event groups](/docs/tutorials/event-groups) |
+
+The copy cost matters more than it looks: on AVR, a 16-byte copy is
+~64 cycles, so a 1 kHz queue costs you 64,000 cycles/s ≈ 0.4% CPU
+just for the copies.
+
+## Try this next
+
+- **Change the back-pressure policy.** Use `MR_WAIT_FOREVER` on send.
+  Now the producer paces itself to the consumer. Trade-offs?
+- **Add an ISR producer.** Use `mr_queue_send_from_isr` from a Timer
+  ISR instead of a task. Note the `yield_required` flag.
+- **Process bursts.** Have the writer drain **all** available messages
+  on each wake, with `mr_queue_count` to check, instead of one at a
+  time. When is this useful?
+
+## See also
+
+<Cards>
+  <Card title="Queue API" href="/docs/api/queue" description="All operations, ISR variants, queries." />
+  <Card title="IPC concept" href="/docs/concepts/ipc" description="Queues vs zero-copy — trade-offs in detail." />
+  <Card title="Memory pools" href="/docs/tutorials/memory-pools" description="Backing zero-copy buffer protocols." />
+</Cards>
