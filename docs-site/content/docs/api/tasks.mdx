@@ -1,59 +1,175 @@
 ---
 title: Tasks
-description: Creating, suspending, and yielding tasks.
+description: Creating, delaying, suspending, resuming, and inspecting tasks.
+---
+
+A task is the kernel's unit of execution. Each has its own stack, a saved
+register snapshot, and a position in the priority-indexed ready queue.
+Tasks are statically allocated — the kernel never calls `malloc`.
+
+```c
+#include "micrortos.h"
+```
+
 ---
 
 ## `mr_task_create`
 
+Allocates a TCB, builds its initial stack frame, and adds it to the
+ready list at the requested priority.
+
+<Signature
+  name="mr_task_create"
+  signature={`mr_status_t mr_task_create(mr_tcb_t       *tcb,
+                            const char      *name,
+                            mr_task_func_t   entry,
+                            void            *arg,
+                            uint8_t          priority,
+                            void            *stack,
+                            uint16_t         stack_size);`}
+  badges={[
+    { label: 'Setup', variant: 'primary' },
+    { label: 'Not ISR-safe', variant: 'warning' },
+  ]}
+/>
+
+<ApiSection title="Parameters">
+
+<ParamTable
+  params={[
+    { name: 'tcb', type: 'mr_tcb_t *', description: 'Caller-allocated task control block. Zeroed by this call.' },
+    { name: 'name', type: 'const char *', description: 'Optional debug name (kept only when MR_USE_TASK_NAMES=1).', optional: true },
+    { name: 'entry', type: 'void (*)(void *)', description: 'The task body. Must not return.' },
+    { name: 'arg', type: 'void *', description: 'Opaque pointer passed to entry.', optional: true },
+    { name: 'priority', type: 'uint8_t', description: '0..MR_MAX_PRIORITIES-1. Lower numbers run at higher priority.' },
+    { name: 'stack', type: 'void *', description: 'Caller-allocated uint8_t buffer for the task stack.' },
+    { name: 'stack_size', type: 'uint16_t', description: 'Must be ≥ MR_MINIMAL_STACK_SIZE (128 B on AVR).' },
+  ]}
+/>
+
+</ApiSection>
+
+<ApiSection title="Returns">
+
+<Returns
+  type="mr_status_t"
+  description="MR_OK on success, otherwise:"
+/>
+
+<ErrorTable
+  className="mt-3"
+  rows={[
+    { code: 'MR_ERR_PARAM', description: 'tcb / entry / stack is NULL, stack_size below minimum, or priority out of range.' },
+  ]}
+/>
+
+</ApiSection>
+
+<ApiSection title="What it does">
+
+1. Validates priority and stack size.
+2. Zeros the TCB.
+3. Fills the stack with the canary pattern `0xA5` for overflow detection.
+4. Builds a fake interrupt frame at the top of the stack via
+   `mr_port_init_task_stack`. When the scheduler does its first
+   `RESTORE_CONTEXT + reti`, control jumps cleanly into `entry`.
+5. Adds the task to the ready list at its priority.
+
+</ApiSection>
+
+### Example
+
 ```c
-mr_status_t mr_task_create(mr_tcb_t       *tcb,
-                                const char       *name,
-                                mr_task_func_t  entry,
-                                void             *arg,
-                                uint8_t           priority,
-                                void             *stack,
-                                uint16_t          stack_size);
+static mr_tcb_t  blink_tcb;
+static uint8_t   blink_stack[192];
+
+static void blinker(void *arg) {
+    (void)arg;
+    while (1) {
+        toggle_led();
+        mr_task_delay(MR_MS_TO_TICKS(500));
+    }
+}
+
+mr_task_create(&blink_tcb, "blink", blinker, NULL,
+               /* priority */ 2,
+               blink_stack, sizeof(blink_stack));
 ```
 
-Creates a task and adds it to the ready list. The TCB and stack must be
-caller-allocated (typically `static`).
+<Callout type="info">
+Why 128 bytes minimum? It accounts for the 33-byte register save plus
+the interrupt frame plus typical call depth. Use
+`mr_task_get_stack_high_water` to measure your actual usage and tune.
+</Callout>
 
-| Argument | Notes |
-|---|---|
-| `tcb` | Caller-allocated `mr_tcb_t`. Zeroed by this call. |
-| `name` | Optional, for debugging. Pass `NULL` if `MR_USE_TASK_NAMES=0`. |
-| `entry` | `void func(void *arg)` — the task body. |
-| `arg` | Opaque pointer passed to `entry`. |
-| `priority` | `0..MR_MAX_PRIORITIES-1`. Lower = higher. |
-| `stack` | Caller-allocated `uint8_t[]`. |
-| `stack_size` | `>= MR_MINIMAL_STACK_SIZE` (128 B on AVR). |
-
-Returns `MR_OK` on success, `MR_ERR_PARAM` on bad input.
+---
 
 ## `mr_task_delay`
 
+Blocks the calling task for the specified number of ticks.
+
+<Signature
+  name="mr_task_delay"
+  signature={`void mr_task_delay(uint32_t ticks);`}
+  badges={[
+    { label: 'Blocking', variant: 'accent' },
+    { label: 'Not ISR-safe', variant: 'warning' },
+  ]}
+/>
+
+<ApiSection title="Parameters">
+
+<ParamTable
+  params={[
+    {
+      name: 'ticks',
+      type: 'uint32_t',
+      description: 'How long to block, in ticks. Use MR_MS_TO_TICKS(ms) for ms-friendly notation. A delay of 0 is equivalent to mr_task_yield().',
+    },
+  ]}
+/>
+
+</ApiSection>
+
+### Example
+
 ```c
-void mr_task_delay(uint32_t ticks);
+mr_task_delay(MR_MS_TO_TICKS(500));   /* sleep 500 ms */
 ```
 
-Blocks the calling task for `ticks` ticks. Use `MR_MS_TO_TICKS(ms)` for
-millisecond-friendly notation:
+<Callout type="info">
+`mr_task_delay` drifts — each iteration adds whatever time the task
+spent before the call. For periodic timing without drift, use
+`mr_task_delay_until` below.
+</Callout>
 
-```c
-mr_task_delay(MR_MS_TO_TICKS(500));    /* sleep 500 ms */
-```
-
-A delay of 0 is equivalent to `mr_task_yield()`.
+---
 
 ## `mr_task_delay_until`
 
-```c
-void mr_task_delay_until(uint32_t *prev_wake, uint32_t increment);
-```
+Sleeps until exactly `*prev_wake + increment` ticks.
 
-Sleeps until exactly `*prev_wake + increment` ticks. Use this when you
-need periodic timing that doesn't drift (`mr_task_delay` drifts by
-your work time per cycle).
+<Signature
+  name="mr_task_delay_until"
+  signature={`void mr_task_delay_until(uint32_t *prev_wake, uint32_t increment);`}
+  badges={[
+    { label: 'Blocking', variant: 'accent' },
+    { label: 'Drift-free', variant: 'success' },
+  ]}
+/>
+
+<ApiSection title="Parameters">
+
+<ParamTable
+  params={[
+    { name: 'prev_wake', type: 'uint32_t *', description: 'Pointer to your last wake time. The kernel updates it for you.' },
+    { name: 'increment', type: 'uint32_t', description: 'Ticks until next wake (relative to *prev_wake).' },
+  ]}
+/>
+
+</ApiSection>
+
+### Example: exact 20 Hz cycle
 
 ```c
 uint32_t next = mr_tick_get();
@@ -63,91 +179,167 @@ while (1) {
 }
 ```
 
+---
+
 ## `mr_task_yield`
 
-```c
-void mr_task_yield(void);
-```
-
 Drops the calling task to the end of its priority's ready queue and runs
-the scheduler. Same-priority tasks will round-robin; higher-priority
-tasks would have preempted you already.
+the scheduler.
+
+<Signature
+  name="mr_task_yield"
+  signature={`void mr_task_yield(void);`}
+  badges={[{ label: 'Cooperative', variant: 'primary' }]}
+/>
+
+<Callout type="info">
+Same-priority tasks will round-robin. Higher-priority tasks would have
+preempted you already, so they don't apply here. Lower-priority tasks
+still don't run unless there are no other ready tasks at your priority.
+</Callout>
+
+---
 
 ## `mr_task_suspend` / `mr_task_resume`
 
-```c
-void mr_task_suspend(mr_tcb_t *tcb);
-void mr_task_resume(mr_tcb_t *tcb);
-```
+Remove a task from scheduling entirely; restore it later.
 
-Removes a task from scheduling entirely. Suspended tasks are off all
-lists until resumed.
+<Signature
+  name="mr_task_suspend"
+  signature={`void mr_task_suspend(mr_tcb_t *tcb);
+void mr_task_resume(mr_tcb_t *tcb);`}
+  badges={[
+    { label: 'State change', variant: 'primary' },
+  ]}
+/>
 
-A task may suspend itself by passing its own TCB (or `NULL` for "self").
+<ApiSection title="Behavior">
+
+- `suspend`: removes the task from any ready/delayed list. The task
+  goes to `MR_TASK_SUSPENDED`. The scheduler ignores it.
+- `resume`: puts the task back on the ready list.
+- A task can suspend itself by passing its own TCB or `NULL`.
+
+</ApiSection>
+
+---
 
 ## `mr_task_priority_set`
 
-```c
-mr_status_t mr_task_priority_set(mr_tcb_t *tcb, uint8_t new_priority);
-```
+Change a task's base priority at runtime.
 
-Changes a task's **base** priority. Does NOT override priority
-inheritance — if the task is currently boosted because it holds a mutex
-contested by a higher-priority task, the inherited priority stays
-effective until the mutex is released.
+<Signature
+  name="mr_task_priority_set"
+  signature={`mr_status_t mr_task_priority_set(mr_tcb_t *tcb, uint8_t new_priority);`}
+/>
+
+<ApiSection title="Returns">
+
+<Returns type="mr_status_t" description="MR_OK on success." />
+
+<ErrorTable
+  className="mt-3"
+  rows={[
+    { code: 'MR_ERR_PARAM', description: 'tcb is NULL or new_priority ≥ MR_MAX_PRIORITIES.' },
+  ]}
+/>
+
+</ApiSection>
+
+<Callout type="warn">
+This sets the **base** priority. If the task is currently holding a
+mutex contested by a higher-priority task, the inherited priority stays
+effective until the mutex is released. The base change applies on the
+next release.
+</Callout>
+
+---
 
 ## `mr_task_get_current`
 
-```c
-mr_tcb_t *mr_task_get_current(void);
-```
+Returns the TCB of the running task.
 
-Returns the currently running task's TCB. Useful for "log who I am"
-patterns.
+<Signature
+  name="mr_task_get_current"
+  signature={`mr_tcb_t *mr_task_get_current(void);`}
+  badges={[
+    { label: 'ISR-safe', variant: 'success' },
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
+
+<Returns
+  type="mr_tcb_t *"
+  description="Pointer to the currently running TCB, or NULL before the scheduler has started."
+/>
+
+---
 
 ## `mr_task_get_stack_high_water`
 
+How many bytes of the stack remain untouched.
+
+<Signature
+  name="mr_task_get_stack_high_water"
+  signature={`uint16_t mr_task_get_stack_high_water(mr_tcb_t *tcb);`}
+  badges={[
+    { label: 'Debug', variant: 'primary' },
+    { label: 'ISR-safe', variant: 'success' },
+  ]}
+/>
+
+<Returns
+  type="uint16_t"
+  description="Bytes that still hold the 0xA5 canary pattern at the bottom of the stack — direct measure of slack."
+/>
+
+### Example
+
 ```c
-uint16_t mr_task_get_stack_high_water(mr_tcb_t *tcb);
+uint16_t free = mr_task_get_stack_high_water(&my_tcb);
+if (free < 32) {
+    log("warning: task %s has only %u bytes left", my_tcb.name, free);
+}
 ```
 
-Returns the number of stack bytes that remain unused (still hold the
-`0xA5` canary pattern). A low number means you're close to overflow.
+<Callout type="info">
+A "low" reading means you came close to overflowing — bump `stack_size`
+accordingly. A "high" reading means you have headroom and could shrink
+the stack to save SRAM.
+</Callout>
 
-Call this in development to size stacks correctly:
+---
 
-```c
-uint16_t left = mr_task_get_stack_high_water(&my_tcb);
-trace("task %s stack: %u bytes free", my_tcb.name, left);
-```
+## The TCB structure
 
-## TCB structure
+`mr_tcb_t` is 61 bytes on AVR with default options. The first field
+(`stack_ptr`) must be at offset 0 for the port-layer assembly.
 
-```c
-struct mr_tcb {
-    void                *stack_ptr;       /* MUST be first */
-    uint8_t              priority;
-    uint8_t              base_priority;
-    mr_task_state_t    state;
-    mr_block_reason_t  block_reason;
-    uint32_t             delay_ticks;
-    uint32_t             wake_tick;
-    mr_list_node_t     state_node;
-    mr_list_node_t     event_node;
-    void                *stack_base;
-    uint16_t             stack_size;
-    void                *blocked_on;
-#if MR_USE_TASK_NAMES
-    const char          *name;
-#endif
-#if MR_USE_RUNTIME_STATS
-    uint32_t             runtime_ticks;
-    uint32_t             switch_in_tick;
-#endif
-    /* ... other optional fields ... */
-};
-```
+<TypeTable
+  type={{
+    stack_ptr: { type: 'void *', description: 'Saved stack pointer (must be first; offset 0).' },
+    priority: { type: 'uint8_t', description: 'Current priority (may be boosted via PI).' },
+    base_priority: { type: 'uint8_t', description: 'Originally assigned priority.' },
+    state: { type: 'mr_task_state_t', description: 'READY / RUNNING / BLOCKED / SUSPENDED' },
+    block_reason: { type: 'mr_block_reason_t', description: 'Why the task is blocked.' },
+    wake_tick: { type: 'uint32_t', description: 'Absolute tick when the delay expires.' },
+    state_node: { type: 'mr_list_node_t', description: 'Ready / delayed list membership.' },
+    event_node: { type: 'mr_list_node_t', description: 'Mutex / sem / queue wait-list membership.' },
+    stack_base: { type: 'void *', description: 'Start of the stack buffer (for canary check).' },
+    stack_size: { type: 'uint16_t', description: 'Stack length in bytes.' },
+    name: { type: 'const char *', description: 'Debug name (when MR_USE_TASK_NAMES=1).' },
+  }}
+/>
 
-61 bytes on AVR with default options. Direct field access is supported
-for read-only inspection (don't write to TCB fields from application
-code).
+Read-only inspection from application code is fine; never mutate TCB
+fields directly.
+
+---
+
+## Related
+
+<Cards>
+  <Card title="Kernel" href="/docs/api/kernel" description="Init, start, tick." />
+  <Card title="Scheduler" href="/docs/concepts/scheduler" description="Priority + EDF + context switching." />
+  <Card title="Notifications" href="/docs/api/notifications" description="Lightweight per-task signaling." />
+</Cards>

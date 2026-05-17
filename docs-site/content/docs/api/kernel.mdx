@@ -1,108 +1,264 @@
 ---
 title: Kernel
-description: Initialization, startup, ticks.
+description: Initialization, startup, and tick management for the MicroRTOS scheduler.
 ---
+
+The kernel module owns the scheduler's lifecycle: bringing it up, starting
+it, and reading the global tick counter. Every MicroRTOS application calls
+exactly two functions in `main` — `mr_kernel_init` and `mr_kernel_start`.
 
 ```c
 #include "micrortos.h"
 ```
 
+---
+
 ## `mr_kernel_init`
 
-```c
-void mr_kernel_init(void);
+Initializes scheduler state and creates the idle task. Must be the first
+MicroRTOS function called in your application.
+
+<Signature
+  name="mr_kernel_init"
+  signature={`void mr_kernel_init(void);`}
+  badges={[
+    { label: 'Setup', variant: 'primary' },
+    { label: 'Non-blocking', variant: 'success' },
+    { label: 'Not ISR-safe', variant: 'warning' },
+  ]}
+/>
+
+<ApiSection title="What it does">
+
+1. Zeros each `g_ready_list[N]` (one per priority level).
+2. Zeros `g_delayed_list`.
+3. Sets `g_current_tcb = NULL`, `g_tick_count = 0`,
+   `g_kernel_state = MR_KERNEL_NOT_STARTED`.
+4. Creates the **idle task** internally — a low-priority task that runs
+   when nothing else is ready. Without it the scheduler can deadlock on
+   the empty-ready-queue case.
+
+</ApiSection>
+
+<ApiSection title="When to call">
+
+Once, at the top of `main`, before any other MicroRTOS call. Tasks
+created after this with `mr_task_create` are queued; they don't start
+running until `mr_kernel_start`.
+
+</ApiSection>
+
+### Example
+
+```c title="main.c"
+int main(void) {
+    hardware_init();
+    mr_kernel_init();              /* <-- first MR call */
+
+    mr_task_create(&task_tcb, "blink", blinker, NULL, 2,
+                   task_stack, sizeof(task_stack));
+
+    mr_kernel_start();              /* never returns */
+}
 ```
 
-Initializes the scheduler, the ready and delayed lists, the priority
-bitmap, and creates the **idle task**. Call this exactly once before any
-other RTOS function.
-
-After this returns, you can create tasks. The scheduler is not yet
-running — that happens at `mr_kernel_start()`.
+---
 
 ## `mr_kernel_start`
 
-```c
-void mr_kernel_start(void);
-```
+Initializes the port (sets up the tick timer), picks the highest-priority
+ready task, and switches to it. **Does not return.**
 
-Initializes the port (configures the tick timer), picks the
-highest-priority ready task, and switches to it. **Never returns.**
+<Signature
+  name="mr_kernel_start"
+  signature={`void mr_kernel_start(void);`}
+  badges={[
+    { label: 'No return', variant: 'danger' },
+    { label: 'Not ISR-safe', variant: 'warning' },
+  ]}
+/>
 
-If no tasks were created (other than idle), this still works — idle
-runs by itself, but nothing else will ever happen.
+<ApiSection title="What it does">
+
+1. Calls `mr_port_init()` (configures Timer0 / SysTick for periodic
+   ticks at `MR_TICK_RATE_HZ`).
+2. Calls `mr_scheduler_switch_context()` to set `g_current_tcb` to the
+   highest-priority ready task.
+3. Sets `g_kernel_state = MR_KERNEL_RUNNING`.
+4. Calls `mr_port_start_scheduler()` which restores the first task's
+   register context and `reti`s into it. From this point on, the
+   scheduler is in control.
+
+</ApiSection>
+
+<Callout type="warn">
+If no tasks have been created (other than the idle task), the kernel
+still starts — but only the idle task will run forever. Verify your
+task creation succeeded before calling this function.
+</Callout>
+
+---
 
 ## `mr_tick_get`
 
-```c
-uint32_t mr_tick_get(void);
-```
+Returns the current free-running tick counter.
 
-Returns the free-running 32-bit tick counter. Incremented every
-`1 / MR_TICK_RATE_HZ` seconds (1 ms by default).
+<Signature
+  name="mr_tick_get"
+  signature={`uint32_t mr_tick_get(void);`}
+  badges={[
+    { label: 'ISR-safe', variant: 'success' },
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
 
-Useful for measuring elapsed time:
+<Returns
+  type="uint32_t"
+  description="System tick count since boot. Increments every 1 / MR_TICK_RATE_HZ seconds (1 ms by default)."
+/>
+
+<Callout type="info">
+The counter is 32-bit. It wraps after `2³² ≈ 49 days` at 1 kHz tick rate.
+**Always use unsigned subtraction to compute deltas** — the wrap behaves
+correctly under unsigned arithmetic.
+</Callout>
+
+### Example: measure elapsed time
 
 ```c
 uint32_t start = mr_tick_get();
 do_work();
-uint32_t elapsed_ms = (mr_tick_get() - start) /* * 1000 / MR_TICK_RATE_HZ */;
+uint32_t elapsed_ms = mr_tick_get() - start;   /* OK across wrap */
 ```
 
-Tick wraparound happens at `2^32` ticks ≈ 49 days. Compute deltas with
-unsigned subtraction (the math wraps correctly).
+---
 
 ## `mr_kernel_state_get`
 
+Returns the current kernel state.
+
+<Signature
+  name="mr_kernel_state_get"
+  signature={`mr_kernel_state_t mr_kernel_state_get(void);`}
+  badges={[
+    { label: 'ISR-safe', variant: 'success' },
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
+
+<Returns type="mr_kernel_state_t" description="One of the values below." />
+
+<ApiSection title="Values">
+
+<ErrorTable
+  rows={[
+    { code: 'MR_KERNEL_NOT_STARTED', description: '`mr_kernel_start` has not been called yet.' },
+    { code: 'MR_KERNEL_RUNNING', description: 'Scheduler is running, ticks are firing.' },
+    { code: 'MR_KERNEL_SUSPENDED', description: 'Scheduler suspended via `mr_scheduler_suspend`.' },
+  ]}
+/>
+
+</ApiSection>
+
+### Example: gate ISR work until kernel is up
+
 ```c
-mr_kernel_state_t mr_kernel_state_get(void);
+ISR(UART_RX_vect) {
+    if (mr_kernel_state_get() == MR_KERNEL_RUNNING) {
+        bool yield;
+        mr_sem_give_from_isr(&rx_sem, &yield);
+    }
+}
 ```
 
-Returns one of:
-
-| Value | Meaning |
-|---|---|
-| `MR_KERNEL_NOT_STARTED` | `mr_kernel_start` has not been called |
-| `MR_KERNEL_RUNNING` | Scheduler is running |
-| `MR_KERNEL_SUSPENDED` | Scheduler is suspended (rare; via `mr_scheduler_suspend`) |
+---
 
 ## `mr_scheduler_suspend` / `mr_scheduler_resume`
 
+Temporarily disable context switches without disabling interrupts. ISRs
+still run; they can mark `g_yield_pending = true`, but no switch happens
+until `resume`. Useful for atomic, multi-step state changes that must
+become visible all-at-once.
+
+<Signature
+  name="mr_scheduler_suspend"
+  signature={`void mr_scheduler_suspend(void);
+void mr_scheduler_resume(void);`}
+  badges={[
+    { label: 'Nestable', variant: 'primary' },
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
+
+<Callout type="warn">
+Calls must balance. Each `suspend` increments a nesting counter; each
+`resume` decrements. The scheduler stays suspended until the counter
+reaches zero.
+</Callout>
+
+### Example
+
 ```c
-void mr_scheduler_suspend(void);
-void mr_scheduler_resume(void);
+mr_scheduler_suspend();
+build_config_atomically();    /* multiple shared-state writes */
+mr_scheduler_resume();
 ```
 
-Temporarily disables context switches without disabling interrupts. ISRs
-still run; they may set `g_yield_pending` but no switch happens until
-`resume`. Useful for atomic, multi-step state changes that must be
-visible all-at-once.
-
-Nest with care — calls must balance.
+---
 
 ## `mr_critical_enter` / `mr_critical_exit`
 
+The strongest form of mutual exclusion: disable interrupts entirely
+(with nesting). Use sparingly — extended critical sections directly
+hurt interrupt latency.
+
+<Signature
+  name="mr_critical_enter"
+  signature={`void mr_critical_enter(void);
+void mr_critical_exit(void);`}
+  badges={[
+    { label: 'Nestable', variant: 'primary' },
+    { label: 'Disables interrupts', variant: 'warning' },
+  ]}
+/>
+
+<Callout type="info">
+For most synchronization, prefer a [mutex](/docs/api/mutex). Reach for
+critical sections only when you need to serialize against an ISR or
+when the section is too short to justify a mutex.
+</Callout>
+
+---
+
+## Hooks
+
+Define any of these in your application and the kernel will call them
+at the right time. Each has a weak default in the kernel that you can
+override.
+
+| Hook | When | Enable |
+|---|---|---|
+| `mr_idle_hook()` | From the idle task | `MR_USE_IDLE_HOOK=1` |
+| `mr_tick_hook()` | Every tick, from the tick ISR | `MR_USE_TICK_HOOK=1` |
+| `mr_stack_overflow_hook(tcb)` | When the canary or SP check fails | Always called |
+| `mr_assert_failed(file, line)` | When an `MR_ASSERT` fires | Always called |
+
+### Stack-overflow handling
+
 ```c
-void mr_critical_enter(void);
-void mr_critical_exit(void);
+/* Override the default trap-and-halt with a logged reset. */
+void mr_stack_overflow_hook(mr_tcb_t *tcb) {
+    save_post_mortem(tcb->name, tcb->stack_size);
+    while (1) wdt_reset();    /* let the HW watchdog fire */
+}
 ```
 
-Disables interrupts (with nesting). The strongest form of mutual
-exclusion. Use sparingly — too-long critical sections hurt interrupt
-latency.
+---
 
-For most synchronization, prefer a mutex.
+## Related
 
-## Hooks (optional)
-
-Define these in your application to receive callbacks:
-
-```c
-void mr_idle_hook(void);          /* enable via MR_USE_IDLE_HOOK */
-void mr_tick_hook(void);          /* enable via MR_USE_TICK_HOOK */
-void mr_stack_overflow_hook(mr_tcb_t *tcb);  /* always called on overflow */
-void mr_assert_failed(const char *file, int line);  /* called on assert */
-```
-
-Each has a weak default in the kernel. Provide your own if you want to
-log or recover.
+<Cards>
+  <Card title="Tasks" href="/docs/api/tasks" description="Creating, delaying, suspending, and resuming tasks." />
+  <Card title="Architecture" href="/docs/concepts/architecture" description="How the kernel modules fit together." />
+  <Card title="Safety" href="/docs/concepts/safety" description="Asserts, stack overflow, MISRA, watchdog." />
+</Cards>

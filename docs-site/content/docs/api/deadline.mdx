@@ -1,123 +1,195 @@
 ---
-title: Deadline (EDF)
+title: EDF deadline scheduling
 description: Earliest Deadline First scheduling for hard real-time tasks.
 ---
 
-Enabled by `MR_USE_EDF_SCHEDULER=1`. EDF tasks coexist with
-fixed-priority tasks.
+Earliest Deadline First (EDF) is a dynamic priority algorithm: at any
+moment, the task with the **earliest absolute deadline** runs. It's
+provably optimal for single-processor systems when total utilization is
+≤ 100%.
+
+EDF tasks coexist with fixed-priority tasks in MicroRTOS — opt in per
+task. Enabled by `MR_USE_EDF_SCHEDULER=1`.
+
+```c
+#include "micrortos.h"
+```
+
+---
 
 ## `mr_deadline_init`
 
-```c
-void mr_deadline_init(void);
-```
-
 Initializes the EDF scheduler state. Call once after `mr_kernel_init`.
+
+<Signature
+  name="mr_deadline_init"
+  signature={`void mr_deadline_init(void);`}
+  badges={[{ label: 'Setup', variant: 'primary' }]}
+/>
+
+---
 
 ## `mr_deadline_task_create`
 
-```c
-mr_status_t mr_deadline_task_create(mr_tcb_t *tcb,
-                                         uint32_t    period_ms,
-                                         uint32_t    deadline_ms,
-                                         uint32_t    wcet_ms);
-```
+Registers an existing task with EDF parameters.
 
-Registers an existing task with EDF parameters. Call after
-`mr_task_create`.
+<Signature
+  name="mr_deadline_task_create"
+  signature={`mr_status_t mr_deadline_task_create(mr_tcb_t *tcb,
+                                      uint32_t  period_ms,
+                                      uint32_t  deadline_ms,
+                                      uint32_t  wcet_ms);`}
+  badges={[{ label: 'Schedulability-checked', variant: 'success' }]}
+/>
 
-| Argument | Meaning |
-|---|---|
-| `period_ms` | Time between job releases |
-| `deadline_ms` | Relative deadline from job release (typically ≤ period) |
-| `wcet_ms` | Worst-case execution time per job |
+<ApiSection title="Parameters">
 
-The kernel performs an admission test using the Liu-Layland bound; the
-call returns `MR_ERR_STATE` if adding the task would exceed
-schedulable utilization.
+<ParamTable params={[
+  { name: 'tcb', type: 'mr_tcb_t *', description: 'A task previously created via mr_task_create.' },
+  { name: 'period_ms', type: 'uint32_t', description: 'Time between job releases (ms).' },
+  { name: 'deadline_ms', type: 'uint32_t', description: 'Relative deadline from job release. Typically ≤ period.' },
+  { name: 'wcet_ms', type: 'uint32_t', description: 'Worst-case execution time per job (ms).' },
+]} />
+
+</ApiSection>
+
+<ApiSection title="Returns">
+
+<ErrorTable rows={[
+  { code: 'MR_OK', description: 'Task accepted into the EDF set.' },
+  { code: 'MR_ERR_STATE', description: 'Adding the task would exceed schedulable utilization (Liu-Layland bound).' },
+  { code: 'MR_ERR_PARAM', description: 'tcb is NULL or parameters are inconsistent.' },
+]} />
+
+</ApiSection>
+
+---
 
 ## `mr_deadline_job_complete`
-
-```c
-void mr_deadline_job_complete(void);
-```
 
 Call at the end of each periodic iteration. Marks the current job done
 and schedules the next release.
 
+<Signature
+  name="mr_deadline_job_complete"
+  signature={`void mr_deadline_job_complete(void);`}
+  badges={[{ label: 'Per iteration', variant: 'primary' }]}
+/>
+
 ```c
 void edf_task(void *arg) {
     while (1) {
-        do_work();
+        do_periodic_work();
         mr_deadline_job_complete();
     }
 }
 ```
 
+---
+
 ## `mr_deadline_set_miss_callback`
 
-```c
-typedef void (*mr_deadline_miss_cb)(mr_deadline_task_t *task);
+<Signature
+  name="mr_deadline_set_miss_callback"
+  signature={`void mr_deadline_set_miss_callback(mr_tcb_t              *tcb,
+                                    mr_deadline_miss_cb    callback);`}
+/>
 
-void mr_deadline_set_miss_callback(mr_tcb_t           *tcb,
-                                      mr_deadline_miss_cb cb);
-```
-
-Sets a callback that fires when the task misses a deadline. Useful for
-logging and recovery.
-
-## `mr_deadline_admission_test`
+Callback signature:
 
 ```c
-bool mr_deadline_admission_test(uint32_t period_ticks, uint32_t wcet_ticks);
+void on_miss(mr_deadline_task_t *task);
 ```
 
-Check if a new task would fit the schedule before calling
-`mr_deadline_task_create`.
+Useful for logging, telemetry, or recovery on missed deadlines.
 
-## `mr_deadline_exact_test`
+---
 
-```c
-bool mr_deadline_exact_test(uint32_t period_ticks,
-                               uint32_t deadline_ticks,
-                               uint32_t wcet_ticks);
-```
+## Schedulability tests
 
-More precise than the Liu-Layland bound, using processor demand
-analysis.
+Run before adding new tasks to verify the set remains feasible.
+
+<Signature
+  name="mr_deadline_admission_test"
+  signature={`bool mr_deadline_admission_test(uint32_t period_ticks,
+                                 uint32_t wcet_ticks);`}
+/>
+
+Liu-Layland sufficient-condition test (`U ≤ n(2^(1/n) − 1)`).
+
+<Signature
+  name="mr_deadline_exact_test"
+  signature={`bool mr_deadline_exact_test(uint32_t period_ticks,
+                             uint32_t deadline_ticks,
+                             uint32_t wcet_ticks);`}
+/>
+
+Tighter test using processor-demand analysis.
+
+---
 
 ## Statistics
 
-```c
-uint16_t mr_deadline_get_miss_count(mr_tcb_t *tcb);
+<Signature
+  name="mr_deadline_get_miss_count / job_count / slack / utilization"
+  signature={`uint16_t mr_deadline_get_miss_count(mr_tcb_t *tcb);
 uint16_t mr_deadline_get_job_count(mr_tcb_t *tcb);
 int32_t  mr_deadline_get_slack(mr_tcb_t *tcb);
-uint8_t  mr_deadline_get_utilization(void);     /* percent */
-```
+uint8_t  mr_deadline_get_utilization(void);   /* percent */`}
+  badges={[{ label: 'Debug', variant: 'primary' }]}
+/>
 
-## Example
+`slack` is signed and negative if the task overran.
+
+---
+
+## Example: two periodic tasks
 
 ```c
 static mr_tcb_t  fast_tcb, slow_tcb;
-static uint8_t     fast_stack[160], slow_stack[160];
+static uint8_t   fast_stack[192], slow_stack[192];
 
 void init(void) {
     mr_kernel_init();
     mr_deadline_init();
 
     mr_task_create(&fast_tcb, "fast", fast_task, NULL, 2,
-                     fast_stack, sizeof(fast_stack));
+                   fast_stack, sizeof(fast_stack));
     mr_task_create(&slow_tcb, "slow", slow_task, NULL, 2,
-                     slow_stack, sizeof(slow_stack));
+                   slow_stack, sizeof(slow_stack));
 
-    mr_deadline_task_create(&fast_tcb,
-                              /* period   */ 50,
-                              /* deadline */ 40,
-                              /* wcet     */ 5);
+    /* period, deadline, wcet (ms) */
+    mr_deadline_task_create(&fast_tcb, 50,  40,  5);
     mr_deadline_task_create(&slow_tcb, 200, 200, 20);
 
     mr_kernel_start();
 }
 ```
 
-See [example 8](/docs/examples#08-edf-deadline).
+See [example 8](/docs/examples) for the complete program.
+
+---
+
+## When to choose EDF
+
+Use EDF when:
+
+- You have hard real-time deadlines that periodic-priority scheduling
+  can't easily satisfy.
+- Total utilization is well-bounded and you can prove schedulability.
+- Tasks are periodic with known WCETs.
+
+Stick with fixed-priority when:
+
+- You have a mix of periodic and sporadic events with priority ordering
+  that's natural (interrupt handlers > control loop > UI).
+- Tasks are dynamically created and destroyed.
+
+---
+
+## Related
+
+<Cards>
+  <Card title="Scheduler" href="/docs/concepts/scheduler" description="Priority + EDF, ready queues, context switching." />
+  <Card title="Tasks" href="/docs/api/tasks" description="Creating the task before registering it with EDF." />
+</Cards>

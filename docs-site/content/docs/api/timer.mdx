@@ -1,65 +1,93 @@
 ---
-title: Timer
-description: Software timers — one-shot and periodic.
+title: Software timer
+description: One-shot and periodic timers without burning a TCB per timer.
 ---
 
-Enabled by `MR_USE_TIMERS=1` (default). The kernel creates a dedicated
-"timer task" that runs all callbacks; the tick ISR just maintains a
-sorted timer list.
+A software timer runs your callback after a delay, optionally repeating.
+All timers share one **timer task** that the kernel creates on
+`mr_kernel_init` — your callbacks run in normal task context, not in
+the tick ISR, so they can call any kernel API.
+
+Enabled by `MR_USE_TIMERS=1` (default).
+
+```c
+#include "micrortos.h"
+```
+
+---
 
 ## `mr_timer_init`
 
-```c
-void mr_timer_init(mr_timer_t       *timer,
-                     const char         *name,
-                     mr_timer_callback callback,
-                     uint32_t            period_ticks,
-                     bool                auto_reload);
-```
+<Signature
+  name="mr_timer_init"
+  signature={`void mr_timer_init(mr_timer_t          *timer,
+                   const char          *name,
+                   mr_timer_callback    callback,
+                   uint32_t             period_ticks,
+                   bool                 auto_reload);`}
+  badges={[{ label: 'Setup', variant: 'primary' }]}
+/>
 
-`auto_reload = true` makes it periodic; `false` makes it one-shot.
+<ApiSection title="Parameters">
 
-The callback signature is:
+<ParamTable params={[
+  { name: 'timer', type: 'mr_timer_t *', description: 'Caller-allocated timer.' },
+  { name: 'name', type: 'const char *', description: 'Optional debug label.', optional: true },
+  { name: 'callback', type: 'void (*)(mr_timer_t *)', description: 'Called when the timer expires. Runs in the timer task.' },
+  { name: 'period_ticks', type: 'uint32_t', description: 'Expiration period in ticks (use MR_MS_TO_TICKS).' },
+  { name: 'auto_reload', type: 'bool', description: 'true = periodic, false = one-shot.' },
+]} />
 
-```c
-void my_callback(mr_timer_t *timer);
-```
+</ApiSection>
 
-It runs in the timer task context — you can call any kernel API.
+---
 
 ## `mr_timer_start` / `mr_timer_stop`
 
-```c
-mr_status_t mr_timer_start(mr_timer_t *timer);
-mr_status_t mr_timer_stop(mr_timer_t *timer);
-```
+<Signature
+  name="mr_timer_start / mr_timer_stop"
+  signature={`mr_status_t mr_timer_start(mr_timer_t *timer);
+mr_status_t mr_timer_stop(mr_timer_t *timer);`}
+  badges={[{ label: 'Non-blocking', variant: 'success' }]}
+/>
 
-`start` arms the timer; `stop` cancels a pending expiration. Calling
-`start` on an already-running timer resets the countdown.
+`start` arms the timer (or rearms it, restarting the countdown).
+`stop` cancels a pending expiration.
+
+---
 
 ## `mr_timer_change_period`
 
-```c
-mr_status_t mr_timer_change_period(mr_timer_t *timer,
-                                        uint32_t      new_period_ticks);
-```
+<Signature
+  name="mr_timer_change_period"
+  signature={`mr_status_t mr_timer_change_period(mr_timer_t *timer,
+                                    uint32_t    new_period_ticks);`}
+/>
 
-Adjusts the period. If running, the new period applies to the next
-expiration cycle.
+If the timer is running, the new period applies to the next cycle.
+
+---
 
 ## `mr_timer_reset`
 
-```c
-mr_status_t mr_timer_reset(mr_timer_t *timer);
-```
-
 Restart the countdown from now, keeping the existing period.
+
+<Signature
+  name="mr_timer_reset"
+  signature={`mr_status_t mr_timer_reset(mr_timer_t *timer);`}
+/>
+
+---
 
 ## `mr_timer_is_active`
 
-```c
-bool mr_timer_is_active(mr_timer_t *timer);
-```
+<Signature
+  name="mr_timer_is_active"
+  signature={`bool mr_timer_is_active(mr_timer_t *timer);`}
+  badges={[{ label: 'ISR-safe', variant: 'success' }]}
+/>
+
+---
 
 ## Tunables
 
@@ -70,10 +98,12 @@ bool mr_timer_is_active(mr_timer_t *timer);
 #define MR_TIMER_QUEUE_LENGTH     8
 ```
 
-## Example: periodic blink
+---
+
+## Pattern: periodic heartbeat
 
 ```c
-static mr_timer_t blink;
+static mr_timer_t heartbeat;
 
 static void on_tick(mr_timer_t *t) {
     (void)t;
@@ -81,27 +111,43 @@ static void on_tick(mr_timer_t *t) {
 }
 
 void init(void) {
-    mr_timer_init(&blink, "blink", on_tick,
-                    MR_MS_TO_TICKS(500), /* periodic */ true);
-    mr_timer_start(&blink);
+    mr_timer_init(&heartbeat, "hb", on_tick,
+                  MR_MS_TO_TICKS(500), /* periodic */ true);
+    mr_timer_start(&heartbeat);
 }
 ```
 
-## Example: one-shot debounce
+---
+
+## Pattern: one-shot debounce
 
 ```c
 static mr_timer_t debounce;
 
 static void check_button(mr_timer_t *t) {
     (void)t;
-    if (PINB & (1 << PB0)) {
-        button_pressed();
-    }
+    if (PINB & (1 << PB0)) button_pressed();
 }
 
 void on_button_edge(void) {
     mr_timer_init(&debounce, "deb", check_button,
-                    MR_MS_TO_TICKS(20), /* one-shot */ false);
+                  MR_MS_TO_TICKS(20), /* one-shot */ false);
     mr_timer_start(&debounce);
 }
 ```
+
+---
+
+## Cost
+
+| Per timer | ~16 B state + a 12 B list node |
+| Timer task | One TCB + its stack (96 B default) |
+
+---
+
+## Related
+
+<Cards>
+  <Card title="Timers concept" href="/docs/concepts/timers" description="When to use timers vs tasks." />
+  <Card title="Tickless" href="/docs/api/tickless" description="Suppress the periodic tick for battery designs." />
+</Cards>

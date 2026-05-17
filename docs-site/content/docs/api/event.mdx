@@ -1,72 +1,142 @@
 ---
 title: Event groups
-description: Wait on bit patterns — any-of or all-of.
+description: Wait on bit patterns — any-of or all-of, with timeout.
 ---
+
+An event group is a 32-bit (or 16-bit on AVR) bitmap. Tasks set, clear,
+and wait on any subset of bits. It's the cleanest way to express
+"wake me when X or Y happens" without juggling multiple semaphores.
 
 Enabled by `MR_USE_EVENT_GROUPS=1` (default).
 
+```c
+#include "micrortos.h"
+```
+
+---
+
 ## `mr_event_init`
 
-```c
-void mr_event_init(mr_event_t *event);
-```
+<Signature
+  name="mr_event_init"
+  signature={`void mr_event_init(mr_event_t *event);`}
+  badges={[{ label: 'Setup', variant: 'primary' }]}
+/>
+
+<ApiSection title="Parameters">
+
+<ParamTable params={[
+  { name: 'event', type: 'mr_event_t *', description: 'Caller-allocated event group, zeroed by this call.' },
+]} />
+
+</ApiSection>
+
+---
 
 ## `mr_event_set`
 
-```c
-uint32_t mr_event_set(mr_event_t *event, uint32_t bits);
-```
-
 Sets the given bits. Wakes any waiter whose condition is now satisfied.
-Returns the new bit value.
 
-## `mr_event_clear`
+<Signature
+  name="mr_event_set"
+  signature={`uint32_t mr_event_set(mr_event_t *event, uint32_t bits);`}
+  badges={[{ label: 'May preempt', variant: 'warning' }]}
+/>
 
-```c
-uint32_t mr_event_clear(mr_event_t *event, uint32_t bits);
-```
+<ApiSection title="Parameters">
 
-Clears the given bits. Returns the new bit value.
+<ParamTable params={[
+  { name: 'event', type: 'mr_event_t *', description: 'Initialized event group.' },
+  { name: 'bits', type: 'uint32_t', description: 'Bits to OR into the event group.' },
+]} />
 
-## `mr_event_wait`
+</ApiSection>
 
-```c
-uint32_t mr_event_wait(mr_event_t *event,
-                         uint32_t      wait_bits,
-                         bool          wait_all,
-                         bool          clear_on_exit,
-                         uint32_t      timeout);
-```
+<Returns type="uint32_t" description="New bit value after the set." />
 
-Blocks until the condition is met or `timeout` ticks elapse.
-
-| Argument | Meaning |
-|---|---|
-| `wait_bits` | Bits to wait on |
-| `wait_all` | `false` = any of, `true` = all of |
-| `clear_on_exit` | If true, clear the matched bits before returning |
-| `timeout` | Max wait |
-
-Returns the bit pattern that satisfied the condition, or `0` on timeout.
+---
 
 ## `mr_event_set_from_isr`
 
-```c
-uint32_t mr_event_set_from_isr(mr_event_t *event, uint32_t bits,
-                                  bool *yield_required);
-```
-
 ISR-safe variant.
+
+<Signature
+  name="mr_event_set_from_isr"
+  signature={`uint32_t mr_event_set_from_isr(mr_event_t *event,
+                                uint32_t    bits,
+                                bool       *yield_required);`}
+  badges={[
+    { label: 'ISR-safe', variant: 'success' },
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
+
+---
+
+## `mr_event_clear`
+
+Clears the given bits without waking anyone.
+
+<Signature
+  name="mr_event_clear"
+  signature={`uint32_t mr_event_clear(mr_event_t *event, uint32_t bits);`}
+  badges={[{ label: 'Non-blocking', variant: 'success' }]}
+/>
+
+<Returns type="uint32_t" description="New bit value after the clear." />
+
+---
+
+## `mr_event_wait`
+
+Blocks until the requested bit pattern is set, or `timeout` ticks
+elapse.
+
+<Signature
+  name="mr_event_wait"
+  signature={`uint32_t mr_event_wait(mr_event_t *event,
+                         uint32_t    wait_bits,
+                         bool        wait_all,
+                         bool        clear_on_exit,
+                         uint32_t    timeout);`}
+  badges={[
+    { label: 'Blocking', variant: 'accent' },
+    { label: 'Not ISR-safe', variant: 'warning' },
+  ]}
+/>
+
+<ApiSection title="Parameters">
+
+<ParamTable params={[
+  { name: 'event', type: 'mr_event_t *', description: 'Initialized event group.' },
+  { name: 'wait_bits', type: 'uint32_t', description: 'Bits to wait on.' },
+  { name: 'wait_all', type: 'bool', description: 'false = wake when any bit is set; true = wake only when all bits are set.' },
+  { name: 'clear_on_exit', type: 'bool', description: 'If true, clear the matched bits before returning.' },
+  { name: 'timeout', type: 'uint32_t', description: 'MR_WAIT_FOREVER, MR_NO_WAIT, or a tick count.' },
+]} />
+
+</ApiSection>
+
+<Returns
+  type="uint32_t"
+  description="The bit pattern that satisfied the wait, or 0 on timeout."
+/>
+
+---
 
 ## `mr_event_get`
 
-```c
-uint32_t mr_event_get(mr_event_t *event);
-```
-
 Snapshot of current bits without waiting or clearing.
 
-## Pattern: wait for any of several conditions
+<Signature
+  name="mr_event_get"
+  signature={`uint32_t mr_event_get(mr_event_t *event);`}
+  badges={[{ label: 'ISR-safe', variant: 'success' }]}
+/>
+
+---
+
+## Pattern: wake on any of several conditions
 
 ```c
 #define EVT_BUTTON  (1U << 0)
@@ -77,11 +147,13 @@ static mr_event_t events;
 
 void main_task(void *arg) {
     while (1) {
-        uint32_t fired = mr_event_wait(&events,
-                                          EVT_BUTTON | EVT_TIMEOUT | EVT_DATA,
-                                          /* wait_all */ false,
-                                          /* clear */ true,
-                                          MR_WAIT_FOREVER);
+        uint32_t fired = mr_event_wait(
+            &events,
+            EVT_BUTTON | EVT_TIMEOUT | EVT_DATA,
+            /* wait_all      */ false,
+            /* clear_on_exit */ true,
+            MR_WAIT_FOREVER
+        );
         if (fired & EVT_BUTTON)  handle_button();
         if (fired & EVT_TIMEOUT) handle_timeout();
         if (fired & EVT_DATA)    handle_data();
@@ -89,21 +161,30 @@ void main_task(void *arg) {
 }
 ```
 
+---
+
 ## Pattern: barrier (wait for all)
 
-```c
-#define WORKER_1_DONE (1U << 0)
-#define WORKER_2_DONE (1U << 1)
-#define WORKER_3_DONE (1U << 2)
+Three workers, one master. Master waits until all three set their bit.
 
-/* Master */
+```c
+#define W1_DONE (1U << 0)
+#define W2_DONE (1U << 1)
+#define W3_DONE (1U << 2)
+
 mr_event_wait(&events,
-                WORKER_1_DONE | WORKER_2_DONE | WORKER_3_DONE,
-                /* wait_all */ true,
-                /* clear */ true,
-                MR_WAIT_FOREVER);
+              W1_DONE | W2_DONE | W3_DONE,
+              /* wait_all */ true,
+              /* clear */ true,
+              MR_WAIT_FOREVER);
 combine_results();
 ```
 
-Each worker sets its bit when done; master proceeds only after all
-three.
+---
+
+## Related
+
+<Cards>
+  <Card title="Semaphore" href="/docs/api/semaphore" description="For a single counter-style signal." />
+  <Card title="Synchronization" href="/docs/concepts/synchronization" description="Choosing the right primitive." />
+</Cards>

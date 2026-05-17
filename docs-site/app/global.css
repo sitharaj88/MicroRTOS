@@ -2,58 +2,96 @@
 @tailwind components;
 @tailwind utilities;
 
-/* MicroRTOS docs - global styles */
+/* MicroRTOS — global styles, custom utilities, base typography. */
 
 @layer base {
   :root {
-    /* Backdrop gradients used on the marketing surfaces. */
-    --gradient-hero: radial-gradient(
-      80% 50% at 50% 0%,
-      hsl(217 91% 50% / 0.18),
-      transparent 70%
-    );
-    --gradient-grid: linear-gradient(
-      to right,
-      hsl(217 32% 91% / 0.5) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      to bottom,
-      hsl(217 32% 91% / 0.5) 1px,
-      transparent 1px
-    );
+    --grid-color: hsl(217 32% 91% / 0.5);
   }
 
   .dark {
-    --gradient-hero: radial-gradient(
-      80% 50% at 50% 0%,
-      hsl(217 91% 60% / 0.22),
-      transparent 70%
-    );
-    --gradient-grid: linear-gradient(
-      to right,
-      hsl(217 33% 25% / 0.4) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      to bottom,
-      hsl(217 33% 25% / 0.4) 1px,
-      transparent 1px
-    );
+    --grid-color: hsl(215 28% 17% / 0.7);
   }
 
   body {
     @apply font-sans antialiased;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Inter and JetBrains Mono via CDN; declared here so SSR doesn't FOUT badly. */
+  ::selection {
+    background-color: hsl(var(--color-fd-primary) / 0.25);
   }
 }
 
 @layer utilities {
-  .hero-glow {
-    background-image: var(--gradient-hero);
+  /* Mesh gradient backdrop — used in heroes. */
+  .bg-mesh {
+    background-image: theme('backgroundImage.mesh-light');
   }
-  .grid-bg {
-    background-image: var(--gradient-grid);
+  .dark .bg-mesh {
+    background-image: theme('backgroundImage.mesh-dark');
+  }
+
+  /* Subtle grid overlay, fades out toward edges. */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
     background-size: 48px 48px;
-    mask-image: radial-gradient(ellipse 70% 50% at 50% 0%, black, transparent);
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 80%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 80%);
+  }
+
+  /* Used by the hero terminal frame */
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  /* Soft glow ring under spotlight elements */
+  .glow-primary {
+    box-shadow:
+      0 0 0 1px hsl(var(--color-fd-primary) / 0.15),
+      0 10px 40px -10px hsl(var(--color-fd-primary) / 0.45);
+  }
+  .glow-accent {
+    box-shadow:
+      0 0 0 1px hsl(var(--color-fd-accent) / 0.15),
+      0 10px 40px -10px hsl(var(--color-fd-accent) / 0.45);
+  }
+
+  /* Shimmer used on the "Hardware-validated" badge */
+  .shimmer-mask {
+    -webkit-mask: linear-gradient(110deg, black 30%, transparent 50%, black 70%);
+    mask: linear-gradient(110deg, black 30%, transparent 50%, black 70%);
+  }
+
+  /* Gradient text used in display headings */
+  .text-gradient {
+    background-image: linear-gradient(
+      to bottom right,
+      hsl(var(--color-fd-foreground)),
+      hsl(var(--color-fd-foreground)),
+      hsl(var(--color-fd-muted-foreground))
+    );
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+
+  .text-gradient-brand {
+    background-image: linear-gradient(
+      to right,
+      hsl(var(--color-fd-primary)),
+      hsl(var(--color-fd-accent))
+    );
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
   }
 }

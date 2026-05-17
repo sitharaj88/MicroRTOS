@@ -3,108 +3,197 @@ title: Queue
 description: Fixed-size message queue with blocking send and receive.
 ---
 
+A queue stores a FIFO of fixed-size items in a caller-provided buffer.
+Messages are **copied** in on send and out on receive — once
+`mr_queue_send` returns, the kernel has its own copy, no pointer
+ownership issues.
+
 Enabled by `MR_USE_QUEUES=1` (default).
+
+```c
+#include "micrortos.h"
+```
+
+---
 
 ## `mr_queue_init`
 
-```c
-void mr_queue_init(mr_queue_t *queue,
-                     void         *buffer,
-                     uint16_t      item_size,
-                     uint16_t      capacity);
-```
+<Signature
+  name="mr_queue_init"
+  signature={`void mr_queue_init(mr_queue_t *queue,
+                   void       *buffer,
+                   uint16_t    item_size,
+                   uint16_t    capacity);`}
+  badges={[{ label: 'Setup', variant: 'primary' }]}
+/>
 
-| Argument | Meaning |
-|---|---|
-| `buffer` | Caller-allocated storage, at least `item_size * capacity` bytes |
-| `item_size` | Size of each message in bytes |
-| `capacity` | Maximum number of pending messages |
+<ApiSection title="Parameters">
+
+<ParamTable params={[
+  { name: 'queue', type: 'mr_queue_t *', description: 'Caller-allocated queue.' },
+  { name: 'buffer', type: 'void *', description: 'Caller-allocated storage, at least item_size × capacity bytes.' },
+  { name: 'item_size', type: 'uint16_t', description: 'Size of each message in bytes.' },
+  { name: 'capacity', type: 'uint16_t', description: 'Maximum number of pending messages.' },
+]} />
+
+</ApiSection>
+
+---
 
 ## `mr_queue_send`
 
-```c
-mr_status_t mr_queue_send(mr_queue_t *queue,
-                               const void   *item,
-                               uint32_t      timeout);
-```
+<Signature
+  name="mr_queue_send"
+  signature={`mr_status_t mr_queue_send(mr_queue_t *queue,
+                            const void *item,
+                            uint32_t    timeout);`}
+  badges={[{ label: 'Blocking', variant: 'accent' }]}
+/>
 
-Copies `item` into the queue tail. Blocks up to `timeout` if full.
-Returns `MR_OK`, `MR_ERR_TIMEOUT`, or `MR_ERR_FULL` (on
-non-blocking).
+<ApiSection title="Parameters">
+
+<ParamTable params={[
+  { name: 'queue', type: 'mr_queue_t *', description: 'Initialized queue.' },
+  { name: 'item', type: 'const void *', description: 'Pointer to item_size bytes that get copied in.' },
+  { name: 'timeout', type: 'uint32_t', description: 'How long to wait if the queue is full.' },
+]} />
+
+</ApiSection>
+
+<ApiSection title="Returns">
+
+<ErrorTable rows={[
+  { code: 'MR_OK', description: 'Message queued.' },
+  { code: 'MR_ERR_TIMEOUT', description: 'Queue full when timeout expired.' },
+  { code: 'MR_ERR_FULL', description: 'Returned only when timeout = MR_NO_WAIT.' },
+]} />
+
+</ApiSection>
+
+---
 
 ## `mr_queue_send_front`
 
-```c
-mr_status_t mr_queue_send_front(mr_queue_t *queue,
-                                     const void   *item,
-                                     uint32_t      timeout);
-```
-
 Same as `send`, but inserts at the head — for priority/urgent messages.
+
+<Signature
+  name="mr_queue_send_front"
+  signature={`mr_status_t mr_queue_send_front(mr_queue_t *queue,
+                                  const void *item,
+                                  uint32_t    timeout);`}
+  badges={[{ label: 'Blocking', variant: 'accent' }]}
+/>
+
+---
 
 ## `mr_queue_send_from_isr`
 
-```c
-mr_status_t mr_queue_send_from_isr(mr_queue_t *queue,
-                                        const void   *item,
-                                        bool         *yield_required);
-```
+<Signature
+  name="mr_queue_send_from_isr"
+  signature={`mr_status_t mr_queue_send_from_isr(mr_queue_t *queue,
+                                     const void *item,
+                                     bool       *yield_required);`}
+  badges={[
+    { label: 'ISR-safe', variant: 'success' },
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
 
-ISR-safe, non-blocking.
+---
 
 ## `mr_queue_receive`
 
-```c
-mr_status_t mr_queue_receive(mr_queue_t *queue,
-                                  void         *item,
-                                  uint32_t      timeout);
-```
+<Signature
+  name="mr_queue_receive"
+  signature={`mr_status_t mr_queue_receive(mr_queue_t *queue,
+                               void       *item,
+                               uint32_t    timeout);`}
+  badges={[{ label: 'Blocking', variant: 'accent' }]}
+/>
 
-Copies the head message into `item` and removes it. Blocks up to
-`timeout` if empty.
+<ApiSection title="Parameters">
+
+<ParamTable params={[
+  { name: 'queue', type: 'mr_queue_t *', description: 'Initialized queue.' },
+  { name: 'item', type: 'void *', description: 'Where to copy the head message — at least item_size bytes.' },
+  { name: 'timeout', type: 'uint32_t', description: 'How long to wait if empty.' },
+]} />
+
+</ApiSection>
+
+<ApiSection title="Returns">
+
+<ErrorTable rows={[
+  { code: 'MR_OK', description: 'Message dequeued.' },
+  { code: 'MR_ERR_TIMEOUT', description: 'Queue empty when timeout expired.' },
+  { code: 'MR_ERR_EMPTY', description: 'Returned only when timeout = MR_NO_WAIT.' },
+]} />
+
+</ApiSection>
+
+---
 
 ## `mr_queue_receive_from_isr`
 
-```c
-mr_status_t mr_queue_receive_from_isr(mr_queue_t *queue,
-                                           void         *item,
-                                           bool         *yield_required);
-```
+<Signature
+  name="mr_queue_receive_from_isr"
+  signature={`mr_status_t mr_queue_receive_from_isr(mr_queue_t *queue,
+                                        void       *item,
+                                        bool       *yield_required);`}
+  badges={[
+    { label: 'ISR-safe', variant: 'success' },
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
+
+---
 
 ## `mr_queue_peek`
 
-```c
-mr_status_t mr_queue_peek(mr_queue_t *queue,
-                               void         *item,
-                               uint32_t      timeout);
-```
+Reads the head without removing it.
 
-Reads the head without removing.
+<Signature
+  name="mr_queue_peek"
+  signature={`mr_status_t mr_queue_peek(mr_queue_t *queue,
+                            void       *item,
+                            uint32_t    timeout);`}
+  badges={[{ label: 'Blocking', variant: 'accent' }]}
+/>
 
-## `mr_queue_count`
+---
 
-```c
-uint16_t mr_queue_count(mr_queue_t *queue);
+## Queries
+
+<Signature
+  name="mr_queue_count / spaces / is_empty / is_full"
+  signature={`uint16_t mr_queue_count(mr_queue_t *queue);
 uint16_t mr_queue_spaces_available(mr_queue_t *queue);
 bool     mr_queue_is_empty(mr_queue_t *queue);
-bool     mr_queue_is_full(mr_queue_t *queue);
-```
+bool     mr_queue_is_full(mr_queue_t *queue);`}
+  badges={[{ label: 'ISR-safe', variant: 'success' }]}
+/>
+
+---
 
 ## `mr_queue_reset`
 
-```c
-void mr_queue_reset(mr_queue_t *queue);
-```
-
 Drops all pending messages. Doesn't touch waiters.
 
-## Example
+<Signature
+  name="mr_queue_reset"
+  signature={`void mr_queue_reset(mr_queue_t *queue);`}
+  badges={[{ label: 'Destructive', variant: 'danger' }]}
+/>
+
+---
+
+## Complete example
 
 ```c
 typedef struct { uint16_t code; uint32_t value; } event_t;
 
 static event_t       buffer[8];
-static mr_queue_t  events;
+static mr_queue_t    events;
 
 void init(void) {
     mr_queue_init(&events, buffer, sizeof(event_t), 8);
@@ -127,3 +216,20 @@ void consumer(void *arg) {
     }
 }
 ```
+
+---
+
+## Zero-copy alternative
+
+For large messages or high-throughput pipelines, the copy on every send
+is wasteful. Use [zero-copy buffers](/docs/concepts/ipc#zero-copy-buffers)
+instead — you transfer ownership of a pointer.
+
+---
+
+## Related
+
+<Cards>
+  <Card title="IPC" href="/docs/concepts/ipc" description="Queues vs zero-copy buffers." />
+  <Card title="Mempool" href="/docs/api/mempool" description="For backing zero-copy buffer pools." />
+</Cards>

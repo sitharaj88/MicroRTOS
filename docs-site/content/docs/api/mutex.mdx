@@ -1,83 +1,238 @@
 ---
 title: Mutex
-description: Recursive mutexes with priority inheritance.
+description: Recursive mutexes with priority inheritance to prevent unbounded priority inversion.
 ---
+
+Mutexes are the most common synchronization primitive. MicroRTOS mutexes
+are **recursive** (a task can lock its own mutex N times) and implement
+**priority inheritance** to prevent unbounded priority inversion.
 
 Enabled by `MR_USE_MUTEXES=1` (default).
 
+```c
+#include "micrortos.h"
+```
+
+---
+
+## Why priority inheritance?
+
+Without PI, this classic bug bites: low-priority task L holds a mutex,
+high-priority task H wants it and blocks, then a medium-priority task M
+preempts L (and keeps running indefinitely because H is blocked). H is
+effectively waiting on M — unbounded inversion.
+
+With PI, when H blocks on L's mutex, L is **temporarily boosted to H's
+priority**. M can no longer preempt L. When L releases, L returns to its
+base priority and H runs. The kernel does this for you.
+
+---
+
 ## `mr_mutex_init`
 
-```c
-void mr_mutex_init(mr_mutex_t *mutex);
-```
+Initializes a mutex to the unlocked state.
 
-Initializes a mutex to the unlocked state. Caller-allocated.
+<Signature
+  name="mr_mutex_init"
+  signature={`void mr_mutex_init(mr_mutex_t *mutex);`}
+  badges={[
+    { label: 'Setup', variant: 'primary' },
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
 
-## `mr_mutex_lock`
+<ApiSection title="Parameters">
 
-```c
-mr_status_t mr_mutex_lock(mr_mutex_t *mutex, uint32_t timeout);
-```
+<ParamTable
+  params={[
+    { name: 'mutex', type: 'mr_mutex_t *', description: 'Caller-allocated mutex. Zeroed by this call.' },
+  ]}
+/>
 
-Locks the mutex, blocking up to `timeout` ticks if it's held by another
-task. Recursive — a task can lock its own mutex N times and must unlock
-N times to release.
+</ApiSection>
 
-Returns:
-
-- `MR_OK` on success
-- `MR_ERR_TIMEOUT` if the mutex was still held when the timeout expired
-- `MR_ERR_PARAM` on `NULL` mutex
-
-### Priority inheritance
-
-If a higher-priority task blocks on a mutex held by a lower-priority
-task, the holder is boosted to the waiter's priority. When the holder
-releases, it returns to its base priority. This prevents unbounded
-priority inversion.
-
-## `mr_mutex_unlock`
-
-```c
-mr_status_t mr_mutex_unlock(mr_mutex_t *mutex);
-```
-
-Releases one level of recursion. If recursion count reaches 0, wakes the
-highest-priority waiter (if any).
-
-Returns `MR_ERR_STATE` if called by a task that doesn't hold the
-mutex.
-
-## `mr_mutex_try_lock`
-
-```c
-mr_status_t mr_mutex_try_lock(mr_mutex_t *mutex);
-```
-
-Non-blocking. Equivalent to `mr_mutex_lock(mutex, MR_NO_WAIT)`.
-
-## `mr_mutex_get_owner`
-
-```c
-mr_tcb_t *mr_mutex_get_owner(mr_mutex_t *mutex);
-```
-
-Returns the TCB of the current holder, or `NULL` if unlocked. For
-debugging and introspection.
-
-## Example
+### Example
 
 ```c
 static mr_mutex_t spi_lock;
 
-void init(void) { mr_mutex_init(&spi_lock); }
+void init(void) {
+    mr_mutex_init(&spi_lock);
+}
+```
+
+---
+
+## `mr_mutex_lock`
+
+Acquires the mutex, blocking up to `timeout` ticks if it's held by
+another task.
+
+<Signature
+  name="mr_mutex_lock"
+  signature={`mr_status_t mr_mutex_lock(mr_mutex_t *mutex, uint32_t timeout);`}
+  badges={[
+    { label: 'Blocking', variant: 'accent' },
+    { label: 'Recursive', variant: 'primary' },
+    { label: 'Inherits priority', variant: 'success' },
+  ]}
+/>
+
+<ApiSection title="Parameters">
+
+<ParamTable
+  params={[
+    { name: 'mutex', type: 'mr_mutex_t *', description: 'Initialized mutex.' },
+    { name: 'timeout', type: 'uint32_t', description: 'Max ticks to wait. 0 = MR_NO_WAIT, MR_WAIT_FOREVER for indefinite.' },
+  ]}
+/>
+
+</ApiSection>
+
+<ApiSection title="Returns">
+
+<Returns type="mr_status_t" description="MR_OK if the mutex was acquired." />
+
+<ErrorTable
+  className="mt-3"
+  rows={[
+    { code: 'MR_ERR_TIMEOUT', description: 'The mutex was still held when the timeout expired.' },
+    { code: 'MR_ERR_PARAM', description: 'mutex is NULL.' },
+  ]}
+/>
+
+</ApiSection>
+
+<Callout type="info">
+A task can lock its own mutex N times. Each lock must be matched by an
+`mr_mutex_unlock`. The mutex stays held until the recursion count
+returns to zero.
+</Callout>
+
+---
+
+## `mr_mutex_unlock`
+
+Releases one level of recursion. If the count reaches 0, wakes the
+highest-priority waiter (if any).
+
+<Signature
+  name="mr_mutex_unlock"
+  signature={`mr_status_t mr_mutex_unlock(mr_mutex_t *mutex);`}
+  badges={[
+    { label: 'May preempt', variant: 'warning' },
+  ]}
+/>
+
+<ApiSection title="Returns">
+
+<Returns type="mr_status_t" description="MR_OK on success." />
+
+<ErrorTable
+  className="mt-3"
+  rows={[
+    { code: 'MR_ERR_STATE', description: 'Called by a task that does not hold the mutex.' },
+    { code: 'MR_ERR_PARAM', description: 'mutex is NULL.' },
+  ]}
+/>
+
+</ApiSection>
+
+<Callout type="warn">
+Releasing a mutex you don't own is a serious bug. The kernel returns an
+error rather than corrupting state, but always pair lock with unlock
+explicitly.
+</Callout>
+
+---
+
+## `mr_mutex_try_lock`
+
+Non-blocking lock attempt. Equivalent to `mr_mutex_lock(mutex, MR_NO_WAIT)`.
+
+<Signature
+  name="mr_mutex_try_lock"
+  signature={`mr_status_t mr_mutex_try_lock(mr_mutex_t *mutex);`}
+  badges={[
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
+
+<ApiSection title="Returns">
+
+<ErrorTable
+  rows={[
+    { code: 'MR_OK', description: 'Acquired.' },
+    { code: 'MR_ERR_TIMEOUT', description: 'Already held.' },
+  ]}
+/>
+
+</ApiSection>
+
+---
+
+## `mr_mutex_get_owner`
+
+Returns the TCB of the current holder, or `NULL` if unlocked.
+
+<Signature
+  name="mr_mutex_get_owner"
+  signature={`mr_tcb_t *mr_mutex_get_owner(mr_mutex_t *mutex);`}
+  badges={[
+    { label: 'Debug', variant: 'primary' },
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
+
+For introspection and debugging — useful in deadlock analysis.
+
+---
+
+## Complete example
+
+```c
+static mr_mutex_t spi_lock;
+
+void init(void) {
+    mr_mutex_init(&spi_lock);
+}
 
 uint16_t read_sensor(uint8_t addr) {
     if (mr_mutex_lock(&spi_lock, MR_MS_TO_TICKS(100)) != MR_OK) {
-        return 0xFFFF;     /* timeout — busy */
+        return 0xFFFF;     /* peripheral busy too long — caller decides */
     }
-    uint16_t val = spi_xfer(addr);
+    spi_select(addr);
+    uint16_t val = spi_xfer();
+    spi_deselect();
     mr_mutex_unlock(&spi_lock);
     return val;
 }
 ```
+
+---
+
+## Anti-patterns
+
+<Callout type="warn">
+
+**Don't lock a mutex from an ISR.** ISRs can't block. Use a semaphore
+or task notification with `_from_isr` instead.
+
+**Don't hold a mutex across `mr_task_delay`.** Hold for as little time
+as possible. Holding across a delay invites priority inversions.
+
+**Don't use a mutex as a signal.** Mutexes are for mutual exclusion —
+one owner, one path. For "wake me when X happens," use a
+[semaphore](/docs/api/semaphore) or a [task notification](/docs/api/notifications).
+
+</Callout>
+
+---
+
+## Related
+
+<Cards>
+  <Card title="Semaphore" href="/docs/api/semaphore" description="Counting signals, ISR-safe." />
+  <Card title="Synchronization" href="/docs/concepts/synchronization" description="When to use which primitive." />
+  <Card title="Kernel" href="/docs/api/kernel" description="Critical sections — the next escalation." />
+</Cards>

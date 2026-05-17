@@ -6,12 +6,20 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { Step, Steps } from 'fumadocs-ui/components/steps';
 import { TypeTable } from 'fumadocs-ui/components/type-table';
 
-// MDX surface: the docs theme plus a few first-class doc components
-// (Callout, Cards, Steps, Tabs, TypeTable) so authors don't have to
-// import them in every page.
+import { Signature, ApiSection } from '@/components/api/signature';
+import { ParamTable, Returns } from '@/components/api/param-table';
+import { ErrorTable } from '@/components/api/error-table';
+import { Badge } from '@/components/ui/badge';
+
+/**
+ * MDX surface: Fumadocs defaults plus a curated set of doc components.
+ * MDX authors get all of these as in-scope identifiers without needing
+ * explicit imports per page.
+ */
 export function getMDXComponents(extra?: MDXComponents): MDXComponents {
   return {
     ...defaultComponents,
+    // Fumadocs UI
     Callout,
     Card,
     Cards,
@@ -20,6 +28,13 @@ export function getMDXComponents(extra?: MDXComponents): MDXComponents {
     Step,
     Steps,
     TypeTable,
+    // MicroRTOS API-doc primitives
+    Signature,
+    ApiSection,
+    ParamTable,
+    Returns,
+    ErrorTable,
+    Badge,
     ...extra,
   };
 }

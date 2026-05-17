@@ -1,0 +1,237 @@
+---
+title: FAQ
+description: Common questions about MicroRTOS — design choices, scope, and trade-offs.
+icon: HelpCircle
+---
+
+If your question isn't here, [open an issue on GitHub](https://github.com/sitharaj88/rtos/issues)
+or check the [Concepts](/docs/concepts) section for deeper background.
+
+## Design
+
+### Is MicroRTOS a fork of FreeRTOS?
+
+No. It's an independent kernel written from scratch. The two share a
+feature surface (priority scheduling, mutexes with PI, queues, timers,
+etc.) because those are the well-known primitives, but no code is
+shared.
+
+### Why "Micro"? How small can it really get?
+
+The smallest useful program is around **3.5 KB of flash and 518 B of
+SRAM** on an ATmega328P — kernel plus one task plus a single
+`mr_task_delay` loop. Every advanced feature is gated by an `MR_USE_*`
+flag; disabled features cost zero bytes thanks to link-time dead-code
+elimination.
+
+See [Performance](/docs/performance) for the full breakdown.
+
+### Why a single `micrortos.h` umbrella header?
+
+Discoverability. You include one file and everything is in scope. The
+implementation is split across `mr_task.h`, `mr_mutex.h`, etc., but
+those are details — application code doesn't need to know.
+
+### Why MISRA C:2012?
+
+Because much of the audience writes safety-relevant firmware where the
+toolchain has to pass a static-analysis gate. The kernel uses MISRA's
+guidance throughout (`MR_USE_ASSERT`, explicit casts, no recursion,
+single-return where reasonable). `make strict` builds with a curated
+warning set close to MISRA's mandatory rules.
+
+---
+
+## Scope and what's not included
+
+### Does MicroRTOS include device drivers?
+
+No. The kernel is just the scheduler and its primitives. Drivers
+(UART, SPI, I²C, ADC) are application-level — you bring or write your
+own. This is intentional: drivers vary too much across chips and
+projects to ship a useful "blessed" set.
+
+### Is there a filesystem or network stack?
+
+No. If you need either, look at Zephyr, NuttX, or a TCP/IP stack like
+lwIP that you integrate yourself.
+
+### Does it support dynamic loading or processes?
+
+No. Every task is static at link time. No `fork`, no `dlopen`, no
+process isolation.
+
+### What about C++ support?
+
+The kernel is plain C and exposes a C ABI. You can call it from C++
+without issue (the headers wrap themselves in `extern "C"`). The kernel
+itself doesn't use C++; if your application does, that's fine.
+
+---
+
+## Hardware
+
+### Which boards are supported today?
+
+**AVR ports** run on:
+- ATmega328P (Uno, Nano)
+- ATmega2560 (Mega)
+- ATmega32U4 (Leonardo, Pro Micro)
+
+**ARM Cortex-M port** targets:
+- SAM3X8E (Arduino Due)
+- SAMD21 (Zero, MKR series)
+
+For ARM, the port has been syntax-checked under `arm-none-eabi-gcc` but
+not flashed-and-validated like the AVR port has been on an Uno.
+
+### What's the smallest CPU it'll run on?
+
+ATmega328P is the smallest we test. The kernel core compiles down to
+about 3 KB even on AVR `-Os`. In principle it could fit smaller chips
+(ATmega168 with 16 KB flash, 1 KB SRAM) if you trim tasks aggressively,
+but you'd lose most of the headroom for application code.
+
+### Can I run it on RP2040 / ESP32?
+
+You'd need to write a port (~500 lines). The SMP scaffolding exists in
+the kernel but needs platform-specific multi-core glue
+(`mr_port_smp_*`). RP2040 is the easiest first multi-core target — see
+the [Porting guide](/docs/porting).
+
+---
+
+## Memory
+
+### Can I use `malloc`?
+
+The kernel never calls `malloc`. Your application can, but we recommend
+a [memory pool](/docs/api/mempool) instead: O(1) deterministic
+allocation, no fragmentation, no surprises in your worst-case timing.
+
+### How do I size task stacks?
+
+Start with `MR_MINIMAL_STACK_SIZE` (128 B on AVR) and measure with
+`mr_task_get_stack_high_water`. Bump up if you're under 32 B of slack;
+shrink if you have a lot of headroom. The kernel asserts the minimum on
+`mr_task_create`.
+
+### Can two tasks share a stack?
+
+No, never. Each task has its own register snapshot saved on its own
+stack. Sharing would corrupt the saved context on every switch.
+
+---
+
+## Scheduling
+
+### Lower priority number = higher priority?
+
+Yes. Priority 0 is the highest, `MR_MAX_PRIORITIES - 1` is the lowest.
+This matches FreeRTOS-and-most-other-RTOS convention.
+
+### How is the next task selected?
+
+A bitmap of "priorities that have ready tasks" is maintained. The
+scheduler finds the lowest set bit (one instruction on ARM via CLZ; a
+small loop on AVR), then pops the head of the FIFO at that priority.
+O(1) regardless of how many tasks you have.
+
+### Are tasks preempted automatically?
+
+Yes, every tick (1 ms by default). If a higher-priority task is ready,
+the tick ISR switches to it. Within a priority, `MR_USE_TIMESLICING`
+controls whether equal-priority tasks round-robin.
+
+### Can I have multiple tasks at the same priority?
+
+Yes. They share that priority's FIFO and round-robin when timeslicing
+is on.
+
+### When should I use EDF instead of fixed priorities?
+
+When you have a periodic task set with known WCETs and a hard-deadline
+requirement that fixed priorities don't easily satisfy. EDF is provably
+optimal for single-core when total utilization is ≤ 100%. See
+[deadline API](/docs/api/deadline).
+
+---
+
+## Production readiness
+
+### Is it production-ready?
+
+The kernel:
+
+- Passes **79 host unit tests** (list, mempool, queue).
+- Is syntax-checked under **every advanced feature flag** on both AVR
+  and ARM Cortex-M.
+- Has been flashed and verified blinking on an Arduino Uno via
+  `mr_task_delay`.
+
+That said, you should still review and test it for your specific
+safety requirements. Read the kernel — it's small enough to do in an
+afternoon. Run `make strict` and `make analyze`. Set up your own
+hardware-in-loop tests.
+
+### How is it licensed?
+
+MIT. Use it commercially, fork it, ship it in closed products. The only
+asks are that you keep the license notice and don't claim we
+endorse anything.
+
+### Where do I get support?
+
+GitHub issues. There's no paid support tier — this is open source.
+
+---
+
+## Bring-up and debugging
+
+### How do I add a new port?
+
+About 500 lines, mostly mechanical. Implement the ~12 functions in
+`mr_port.h`, write a tick ISR, and run the bring-up staircase
+(examples 00 → 09 → 10) to localize bugs. See [Porting](/docs/porting).
+
+### My new port hangs after one blink — where to look?
+
+That's a classic. The likely cause is `mr_port_yield` returning via
+plain `ret` instead of `reti`, which leaves the I bit cleared on
+resume. The AVR port hit exactly this bug — see the Porting guide for
+the bring-up debug staircase.
+
+### How do I run the host unit tests?
+
+```bash
+make test
+```
+
+That builds and runs 79 checks (list, mempool, queue) on the host
+compiler. No hardware required.
+
+---
+
+## Versioning
+
+### How are releases tagged?
+
+Semantic versioning. Breaking ABI changes bump the major; new public
+APIs bump the minor; bug fixes bump the patch. The kernel is currently
+pre-1.0.
+
+### Does the API change between releases?
+
+The public API (functions in `micrortos.h`) is intended to be stable.
+Internal headers (`mr_*.h`) are implementation details and may change.
+
+---
+
+## Still stuck?
+
+[Open an issue](https://github.com/sitharaj88/rtos/issues) with:
+
+1. Target MCU and clock rate.
+2. Compiler version (`avr-gcc --version` etc).
+3. The smallest example that reproduces the problem.
+4. What you expected vs what happens.

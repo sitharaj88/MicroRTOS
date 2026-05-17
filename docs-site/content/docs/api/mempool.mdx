@@ -1,60 +1,109 @@
 ---
 title: Memory pool
-description: Fixed-block O(1) allocation.
+description: Fixed-block O(1) allocation, no fragmentation, no malloc.
 ---
+
+A memory pool is a fixed array of fixed-size blocks with an internal
+free list. Allocation pops the head of the free list; freeing pushes
+back. Both are constant-time. No fragmentation because every block is
+the same size.
 
 Enabled by `MR_USE_MEMORY_POOLS=1` (default).
 
-## `mr_mempool_init`
-
 ```c
-void mr_mempool_init(mr_mempool_t *pool,
-                       void           *buffer,
-                       uint16_t        block_size,
-                       uint16_t        block_count);
+#include "micrortos.h"
 ```
 
-| Argument | Meaning |
-|---|---|
-| `buffer` | Caller-allocated storage, `block_size * block_count` bytes |
-| `block_size` | Bytes per block (must be `>= sizeof(void *)`; rounded up otherwise) |
-| `block_count` | Number of blocks |
+---
+
+## `mr_mempool_init`
+
+<Signature
+  name="mr_mempool_init"
+  signature={`void mr_mempool_init(mr_mempool_t *pool,
+                     void         *buffer,
+                     uint16_t      block_size,
+                     uint16_t      block_count);`}
+  badges={[{ label: 'Setup', variant: 'primary' }]}
+/>
+
+<ApiSection title="Parameters">
+
+<ParamTable params={[
+  { name: 'pool', type: 'mr_mempool_t *', description: 'Caller-allocated pool.' },
+  { name: 'buffer', type: 'void *', description: 'Caller-allocated backing storage, block_size × block_count bytes.' },
+  { name: 'block_size', type: 'uint16_t', description: 'Must be ≥ sizeof(void *). Rounded up if smaller.' },
+  { name: 'block_count', type: 'uint16_t', description: 'Number of blocks in the pool.' },
+]} />
+
+</ApiSection>
+
+---
 
 ## `mr_mempool_alloc`
 
-```c
-void *mr_mempool_alloc(mr_mempool_t *pool, uint32_t timeout);
-```
+<Signature
+  name="mr_mempool_alloc"
+  signature={`void *mr_mempool_alloc(mr_mempool_t *pool, uint32_t timeout);`}
+  badges={[{ label: 'Blocking', variant: 'accent' }]}
+/>
 
-Returns a pointer to a free block, or `NULL` on timeout. Blocks up to
-`timeout` ticks if the pool is empty.
+<Returns
+  type="void *"
+  description="Pointer to a free block, or NULL if the pool was empty when timeout expired."
+/>
+
+---
 
 ## `mr_mempool_free`
 
-```c
-mr_status_t mr_mempool_free(mr_mempool_t *pool, void *block);
-```
+<Signature
+  name="mr_mempool_free"
+  signature={`mr_status_t mr_mempool_free(mr_mempool_t *pool, void *block);`}
+  badges={[{ label: 'May preempt', variant: 'warning' }]}
+/>
 
-Returns a block to the pool. Validates that the block is within the
-pool's range (`MR_ERR_PARAM` otherwise).
+<ApiSection title="Returns">
+
+<ErrorTable rows={[
+  { code: 'MR_OK', description: 'Block returned to pool.' },
+  { code: 'MR_ERR_PARAM', description: 'block is NULL or not within the pool range.' },
+]} />
+
+</ApiSection>
+
+---
 
 ## ISR-safe variants
 
-```c
-void          *mr_mempool_alloc_from_isr(mr_mempool_t *pool);
-mr_status_t  mr_mempool_free_from_isr(mr_mempool_t *pool,
-                                           void *block,
-                                           bool *yield_required);
-```
+<Signature
+  name="mr_mempool_alloc_from_isr / free_from_isr"
+  signature={`void *      mr_mempool_alloc_from_isr(mr_mempool_t *pool);
+mr_status_t mr_mempool_free_from_isr(mr_mempool_t *pool,
+                                     void         *block,
+                                     bool         *yield_required);`}
+  badges={[
+    { label: 'ISR-safe', variant: 'success' },
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
+
+`alloc_from_isr` returns `NULL` if empty (never blocks).
+
+---
 
 ## Queries
 
-```c
-uint16_t mr_mempool_available(mr_mempool_t *pool);
+<Signature
+  name="mr_mempool_available / total / block_size / is_empty"
+  signature={`uint16_t mr_mempool_available(mr_mempool_t *pool);
 uint16_t mr_mempool_total(mr_mempool_t *pool);
 uint16_t mr_mempool_block_size(mr_mempool_t *pool);
-bool     mr_mempool_is_empty(mr_mempool_t *pool);
-```
+bool     mr_mempool_is_empty(mr_mempool_t *pool);`}
+  badges={[{ label: 'ISR-safe', variant: 'success' }]}
+/>
+
+---
 
 ## Example
 
@@ -62,14 +111,42 @@ bool     mr_mempool_is_empty(mr_mempool_t *pool);
 #define SLOTS 8
 #define SIZE  32
 
-static uint8_t        memory[SIZE * SLOTS];
+static uint8_t      pool_memory[SIZE * SLOTS];
 static mr_mempool_t pool;
 
 void init(void) {
-    mr_mempool_init(&pool, memory, SIZE, SLOTS);
+    mr_mempool_init(&pool, pool_memory, SIZE, SLOTS);
 }
 
-void *buf = mr_mempool_alloc(&pool, MR_WAIT_FOREVER);
-/* fill, hand to another task */
-mr_mempool_free(&pool, buf);   /* eventually */
+void use_block(void) {
+    void *buf = mr_mempool_alloc(&pool, MR_WAIT_FOREVER);
+    if (!buf) return;
+    /* fill, hand to a consumer, eventually free */
+    mr_mempool_free(&pool, buf);
+}
 ```
+
+---
+
+## Sizing
+
+| Want | Set |
+|---|---|
+| Small messages, 4 in flight | `block_size = sizeof(msg)`, `count = 4` |
+| Variable-size up to N bytes | Pick a bucket size = N (some waste) |
+| Multiple in flight to DMA | `count = your DMA queue depth` |
+
+A 16-block pool of 32-byte blocks uses:
+
+- 512 B backing storage
+- ~32 B for `mr_mempool_t`
+- 0 B of free-list metadata (lives inside free blocks)
+
+---
+
+## Related
+
+<Cards>
+  <Card title="Memory pools" href="/docs/concepts/memory-pools" description="Why fixed-block allocation, sizing trade-offs." />
+  <Card title="IPC" href="/docs/concepts/ipc" description="Pools back zero-copy buffer protocols." />
+</Cards>

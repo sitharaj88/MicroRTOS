@@ -1,0 +1,117 @@
+---
+title: Comparison
+description: How MicroRTOS stacks up against FreeRTOS and Zephyr.
+icon: GitCompare
+---
+
+Three real-time kernels compared head-to-head. Numbers are best-effort
+fair (minimal config, AVR or Cortex-M0+ where applicable).
+
+## Footprint
+
+| Metric | MicroRTOS | FreeRTOS | Zephyr |
+|---|---|---|---|
+| Min flash | ~3.5 KB | ~5–8 KB | ~10 KB+ |
+| Min SRAM (no stacks) | ~250 B | ~250 B | ~500 B |
+| TCB size | 61 B | ~50–80 B | ~80 B |
+| Audit surface | ~5 kLOC | ~20 kLOC | ~500 kLOC |
+| Public API headers | 1 (`micrortos.h`) | ~10 | ~hundreds |
+
+## Feature surface
+
+| Feature | MicroRTOS | FreeRTOS | Zephyr |
+|---|:-:|:-:|:-:|
+| Preemptive scheduler | ✅ | ✅ | ✅ |
+| Priority inheritance | ✅ | ✅ | ✅ |
+| Recursive mutexes | ✅ | ✅ | ✅ |
+| Message queues | ✅ | ✅ | ✅ |
+| Software timers | ✅ | ✅ | ✅ |
+| Event groups | ✅ | ✅ | ✅ |
+| Memory pools | ✅ | ✅ | ✅ |
+| Task notifications | ✅ | ✅ | ✅ |
+| Tickless idle | ✅ | ✅ | ✅ |
+| EDF scheduling | ✅ | ❌ | ❌ |
+| Zero-copy IPC | ✅ | ❌ | partial |
+| Symmetric multiprocessing | partial | ✅ | ✅ |
+| MPU support | partial | ✅ | ✅ |
+
+## Platform support
+
+| Family | MicroRTOS | FreeRTOS | Zephyr |
+|---|---|---|---|
+| AVR | ✅ (Uno tested) | community | ❌ |
+| ARM Cortex-M | ✅ (Cortex-M3 syntax-checked) | ✅ | ✅ |
+| RISC-V | ❌ | ✅ | ✅ |
+| Xtensa (ESP32) | ❌ | ✅ | ✅ |
+| Multicore (RP2040, ESP32-S3) | needs port | ✅ | ✅ |
+
+## Build, tooling, and integration
+
+| | MicroRTOS | FreeRTOS | Zephyr |
+|---|---|---|---|
+| Build system | Makefile | Makefile / CMake | CMake + west |
+| Dependency setup | `git clone && make` | clone + configure | west init + west update |
+| Static analysis | `make strict` + cppcheck | community | west + Coverity-style tools |
+| Hardware-validated test | Arduino Uno | community | Arduino Zero (community) |
+| Single public header | ✅ | ❌ | ❌ |
+| No malloc anywhere | ✅ | partial (heap_n.c optional) | ❌ |
+
+## Licensing
+
+| | License | Commercial use |
+|---|---|---|
+| MicroRTOS | MIT | Yes, no royalties |
+| FreeRTOS | MIT | Yes; AWS-published |
+| Zephyr | Apache 2.0 | Yes; Linux Foundation |
+
+## When to pick each
+
+### Pick MicroRTOS when
+
+- You want a small, auditable kernel you can fully understand.
+- You're on AVR or a small Cortex-M.
+- You need EDF scheduling.
+- You want one-Makefile builds, no west, no CMake gymnastics.
+- You're shipping safety-relevant code that needs MISRA alignment.
+
+### Pick FreeRTOS when
+
+- You need the broadest community of vendor-supported BSPs.
+- You're already on AWS and want IoT-stack integration.
+- You need a feature MicroRTOS doesn't have (full SMP, MPU).
+- You want commercial support contracts.
+
+### Pick Zephyr when
+
+- You need a full BSP — drivers for hundreds of sensors and chips
+  ready to go.
+- Your project is multi-core, multi-MCU, and complex.
+- You're OK with a sizeable toolchain learning curve.
+- You want USB, Bluetooth, networking out-of-the-box.
+
+There's no "best" RTOS. Pick the one whose surface matches your
+constraints. MicroRTOS is in the bottom-left of the size/complexity
+quadrant; FreeRTOS is in the middle; Zephyr is in the upper-right.
+
+## Honest weaknesses
+
+The areas where MicroRTOS is **not** the right choice:
+
+- **Drivers** — we ship none. Bring your own or write them.
+- **Networking** — no TCP/IP stack. Integrate lwIP separately.
+- **Multi-core** — SMP scaffolding exists but no working port today.
+- **Vendor support** — community-driven, no paid backing.
+- **Toolchain integrations** — no Eclipse plug-in, no GUI configurator.
+  Just Makefile.
+
+If those are deal-breakers, FreeRTOS or Zephyr is a better fit.
+
+## Related
+
+import { Cards, Card } from 'fumadocs-ui/components/card';
+
+<Cards>
+  <Card title="Performance" href="/docs/performance" description="Exact flash and SRAM numbers." />
+  <Card title="FAQ" href="/docs/faq" description="Design decisions and trade-offs." />
+  <Card title="Porting" href="/docs/porting" description="What it takes to add a new MCU." />
+</Cards>

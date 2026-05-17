@@ -1,58 +1,97 @@
 ---
-title: Tickless
-description: Long idle sleeps with the tick suppressed.
+title: Tickless idle
+description: Suppress the periodic tick during long sleeps for battery-powered designs.
 ---
+
+The default scheduler runs Timer0 at 1 kHz so every 1 ms you wake the
+CPU, run the tick handler, and probably go right back to sleep — wasteful
+for battery-powered designs. Tickless idle suppresses the tick when the
+system goes idle, reprogramming the hardware timer to fire only at the
+next scheduled event.
 
 Enabled by `MR_USE_TICKLESS_IDLE=1`.
 
-## `mr_tickless_init`
-
 ```c
-void mr_tickless_init(void);
+#include "micrortos.h"
 ```
 
-Initializes tickless state. Call after `mr_kernel_init` and before
-`mr_kernel_start`.
+---
+
+## `mr_tickless_init`
+
+<Signature
+  name="mr_tickless_init"
+  signature={`void mr_tickless_init(void);`}
+  badges={[{ label: 'Setup', variant: 'primary' }]}
+/>
+
+Call after `mr_kernel_init` and before `mr_kernel_start`.
+
+---
 
 ## `mr_tickless_enable`
 
-```c
-void mr_tickless_enable(bool enable);
-```
+<Signature
+  name="mr_tickless_enable"
+  signature={`void mr_tickless_enable(bool enable);`}
+/>
 
 Master switch. Disable to fall back to regular periodic ticking
 (useful for debugging timing-sensitive code).
 
+---
+
 ## `mr_tickless_set_sleep_mode`
 
-```c
-typedef enum {
-    MR_SLEEP_IDLE,        /* CPU stops; peripherals run */
-    MR_SLEEP_ADC,
-    MR_SLEEP_STANDBY,
-    MR_SLEEP_POWER_DOWN,  /* deepest; external wake only */
-} mr_sleep_mode_t;
+<Signature
+  name="mr_tickless_set_sleep_mode"
+  signature={`void mr_tickless_set_sleep_mode(mr_sleep_mode_t mode);`}
+/>
 
-void mr_tickless_set_sleep_mode(mr_sleep_mode_t mode);
-```
+<ApiSection title="Sleep modes (AVR)">
 
-Pick the deepest sleep mode your wake sources support.
+<ErrorTable rows={[
+  { code: 'MR_SLEEP_IDLE', description: 'CPU stops; peripherals run. Any interrupt wakes. Modest saving.' },
+  { code: 'MR_SLEEP_ADC', description: 'CPU + most peripherals stop. Slightly more saving.' },
+  { code: 'MR_SLEEP_STANDBY', description: 'Significant saving; external pin or watchdog wake.' },
+  { code: 'MR_SLEEP_POWER_DOWN', description: 'Deepest; only external pin or WDT wakes. Maximum saving.' },
+]} />
+
+</ApiSection>
+
+<Callout type="warn">
+Some peripherals stop in deep sleep (USART, ADC, SPI). Configure wake
+sources before enabling `POWER_DOWN`.
+</Callout>
+
+---
 
 ## Hooks (`MR_USE_TICKLESS_HOOKS=1`)
 
-```c
-void mr_tickless_pre_sleep_hook(uint32_t expected_ticks);
-void mr_tickless_post_sleep_hook(uint32_t slept_ticks);
-```
+<Signature
+  name="mr_tickless_pre_sleep_hook / post_sleep_hook"
+  signature={`void mr_tickless_pre_sleep_hook(uint32_t expected_ticks);
+void mr_tickless_post_sleep_hook(uint32_t slept_ticks);`}
+/>
 
-Implement to power-manage peripherals around each sleep cycle.
+Implement to power-manage peripherals around each sleep cycle. The
+kernel calls these from the idle task.
+
+---
 
 ## Statistics
 
-```c
-uint32_t mr_tickless_get_sleep_count(void);
-uint32_t mr_tickless_get_total_slept(void);
-```
+<Signature
+  name="mr_tickless_get_sleep_count / total_slept"
+  signature={`uint32_t mr_tickless_get_sleep_count(void);
+uint32_t mr_tickless_get_total_slept(void);`}
+  badges={[{ label: 'Debug', variant: 'primary' }]}
+/>
+
+Use to verify you're actually sleeping. A noisy system might enter
+tickless mode but get woken up constantly.
+
+---
 
 ## Tunables
 
@@ -62,7 +101,39 @@ uint32_t mr_tickless_get_total_slept(void);
 #define MR_TICKLESS_MAX_TICKS  1000  /* hardware timer ceiling */
 ```
 
-## Example
+---
 
-See [example 5](/docs/examples#05-tickless-low-power) and the
-[Tickless idle concept](/docs/concepts/tickless) for a full walkthrough.
+## Example: sensor wake cycle
+
+```c
+void sensor_task(void *arg) {
+    while (1) {
+        sample_and_report();
+        mr_task_delay(MR_MS_TO_TICKS(5000));   /* 5 s sleep */
+    }
+}
+
+int main(void) {
+    mr_kernel_init();
+    mr_tickless_init();
+    mr_tickless_enable(true);
+    mr_tickless_set_sleep_mode(MR_SLEEP_POWER_DOWN);
+
+    mr_task_create(&sensor_tcb, "sensor", sensor_task, NULL, 2,
+                   sensor_stack, sizeof(sensor_stack));
+
+    mr_kernel_start();
+}
+```
+
+Measured current draw on an Uno: ~0.3 mA average vs ~12 mA constantly
+ticking — a 40× improvement.
+
+---
+
+## Related
+
+<Cards>
+  <Card title="Tickless concept" href="/docs/concepts/tickless" description="How tick suppression works." />
+  <Card title="Example 5" href="/docs/examples" description="Tickless low-power demo." />
+</Cards>

@@ -1,57 +1,158 @@
 ---
 title: Semaphore
-description: Binary and counting semaphores.
+description: Binary and counting semaphores for signaling and resource counting.
 ---
+
+A semaphore is a counter you can block on. Binary semaphores
+(`max = 1`) are perfect for ISR-to-task signaling. Counting semaphores
+manage pools of resources.
 
 Enabled by `MR_USE_SEMAPHORES=1` (default).
 
-## `mr_sem_init`
-
 ```c
-void mr_sem_init(mr_sem_t *sem, uint32_t max_count, uint32_t initial);
+#include "micrortos.h"
 ```
 
-| Argument | Meaning |
-|---|---|
-| `max_count` | Maximum count. `1` = binary semaphore. |
-| `initial` | Starting count (`0..max_count`). |
+---
+
+## `mr_sem_init`
+
+Initializes a semaphore with a maximum count and a starting count.
+
+<Signature
+  name="mr_sem_init"
+  signature={`void mr_sem_init(mr_sem_t *sem, uint32_t max_count, uint32_t initial);`}
+  badges={[
+    { label: 'Setup', variant: 'primary' },
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
+
+<ApiSection title="Parameters">
+
+<ParamTable
+  params={[
+    { name: 'sem', type: 'mr_sem_t *', description: 'Caller-allocated semaphore.' },
+    { name: 'max_count', type: 'uint32_t', description: 'Maximum count. 1 = binary semaphore.' },
+    { name: 'initial', type: 'uint32_t', description: 'Starting count, in [0, max_count].' },
+  ]}
+/>
+
+</ApiSection>
+
+### Example
+
+```c
+static mr_sem_t rx_ready;
+mr_sem_init(&rx_ready, /* max */ 1, /* initial */ 0);
+```
+
+---
 
 ## `mr_sem_take`
 
-```c
-mr_status_t mr_sem_take(mr_sem_t *sem, uint32_t timeout);
-```
+Decrements the counter, blocking if it's zero.
 
-Decrements the counter, blocking up to `timeout` ticks if the counter
-is zero. Returns `MR_OK` or `MR_ERR_TIMEOUT`.
+<Signature
+  name="mr_sem_take"
+  signature={`mr_status_t mr_sem_take(mr_sem_t *sem, uint32_t timeout);`}
+  badges={[
+    { label: 'Blocking', variant: 'accent' },
+    { label: 'Not ISR-safe', variant: 'warning' },
+  ]}
+/>
+
+<ApiSection title="Parameters">
+
+<ParamTable
+  params={[
+    { name: 'sem', type: 'mr_sem_t *', description: 'Initialized semaphore.' },
+    { name: 'timeout', type: 'uint32_t', description: 'MR_NO_WAIT, MR_WAIT_FOREVER, or a tick count.' },
+  ]}
+/>
+
+</ApiSection>
+
+<ApiSection title="Returns">
+
+<ErrorTable
+  rows={[
+    { code: 'MR_OK', description: 'Counter decremented.' },
+    { code: 'MR_ERR_TIMEOUT', description: 'Counter was 0 when timeout expired.' },
+  ]}
+/>
+
+</ApiSection>
+
+---
 
 ## `mr_sem_give`
 
-```c
-mr_status_t mr_sem_give(mr_sem_t *sem);
-```
+Increments the counter and wakes the highest-priority waiter.
 
-Increments the counter. Wakes the highest-priority waiter (if any).
-Returns `MR_ERR_FULL` if already at `max_count`.
+<Signature
+  name="mr_sem_give"
+  signature={`mr_status_t mr_sem_give(mr_sem_t *sem);`}
+  badges={[
+    { label: 'May preempt', variant: 'warning' },
+  ]}
+/>
+
+<ApiSection title="Returns">
+
+<ErrorTable
+  rows={[
+    { code: 'MR_OK', description: 'Counter incremented.' },
+    { code: 'MR_ERR_FULL', description: 'Already at max_count.' },
+  ]}
+/>
+
+</ApiSection>
+
+---
 
 ## `mr_sem_give_from_isr`
 
-```c
-mr_status_t mr_sem_give_from_isr(mr_sem_t *sem, bool *yield_required);
-```
+ISR-safe variant. Never blocks; sets `*yield_required` if a context
+switch should follow.
 
-ISR-safe. If `*yield_required` is set on return, request a context
-switch from the ISR's exit path.
+<Signature
+  name="mr_sem_give_from_isr"
+  signature={`mr_status_t mr_sem_give_from_isr(mr_sem_t *sem, bool *yield_required);`}
+  badges={[
+    { label: 'ISR-safe', variant: 'success' },
+    { label: 'Non-blocking', variant: 'success' },
+  ]}
+/>
+
+<ApiSection title="Parameters">
+
+<ParamTable
+  params={[
+    { name: 'sem', type: 'mr_sem_t *', description: 'Initialized semaphore.' },
+    { name: 'yield_required', type: 'bool *', description: 'Set to true if a higher-priority task is now ready. Honor it from the ISR exit path.', optional: true },
+  ]}
+/>
+
+</ApiSection>
+
+---
 
 ## `mr_sem_get_count`
 
-```c
-uint32_t mr_sem_get_count(mr_sem_t *sem);
-```
+<Signature
+  name="mr_sem_get_count"
+  signature={`uint32_t mr_sem_get_count(mr_sem_t *sem);`}
+  badges={[
+    { label: 'ISR-safe', variant: 'success' },
+  ]}
+/>
 
-Snapshot of the current count.
+<Returns type="uint32_t" description="Current count (not the max)." />
 
-## Pattern: ISR-to-task signaling
+---
+
+## Pattern: ISR → task signal
 
 ```c
 static mr_sem_t rx_ready;
@@ -63,7 +164,7 @@ void init(void) {
 void uart_rx_isr(void) {
     bool yield;
     mr_sem_give_from_isr(&rx_ready, &yield);
-    /* port-specific: trigger context switch if yield is true */
+    /* port-specific: schedule a context switch if yield is true */
 }
 
 void rx_task(void *arg) {
@@ -74,10 +175,14 @@ void rx_task(void *arg) {
 }
 ```
 
+---
+
 ## Pattern: resource pool
 
+A counting semaphore caps concurrent access to a pool of N resources.
+
 ```c
-static mr_sem_t slots;  /* counting */
+static mr_sem_t slots;
 
 void init(void) {
     mr_sem_init(&slots, /* max */ 4, /* initial */ 4);
@@ -86,8 +191,18 @@ void init(void) {
 void use_slot(void) {
     mr_sem_take(&slots, MR_WAIT_FOREVER);   /* wait for a slot */
     do_work();
-    mr_sem_give(&slots);                       /* release */
+    mr_sem_give(&slots);                     /* release */
 }
 ```
 
-The counter caps concurrent users at 4.
+At most 4 tasks run `do_work` concurrently.
+
+---
+
+## Related
+
+<Cards>
+  <Card title="Mutex" href="/docs/api/mutex" description="For mutual exclusion (different intent than signaling)." />
+  <Card title="Notifications" href="/docs/api/notifications" description="Even lighter for one-to-one signaling." />
+  <Card title="Event groups" href="/docs/api/event" description="When you need to wait on multiple conditions." />
+</Cards>
