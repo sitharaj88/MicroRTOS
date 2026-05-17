@@ -3,12 +3,12 @@ title: Tasks
 description: Creating, suspending, and yielding tasks.
 ---
 
-## `rtos_task_create`
+## `mr_task_create`
 
 ```c
-rtos_status_t rtos_task_create(rtos_tcb_t       *tcb,
+mr_status_t mr_task_create(mr_tcb_t       *tcb,
                                 const char       *name,
-                                rtos_task_func_t  entry,
+                                mr_task_func_t  entry,
                                 void             *arg,
                                 uint8_t           priority,
                                 void             *stack,
@@ -20,64 +20,64 @@ caller-allocated (typically `static`).
 
 | Argument | Notes |
 |---|---|
-| `tcb` | Caller-allocated `rtos_tcb_t`. Zeroed by this call. |
-| `name` | Optional, for debugging. Pass `NULL` if `RTOS_USE_TASK_NAMES=0`. |
+| `tcb` | Caller-allocated `mr_tcb_t`. Zeroed by this call. |
+| `name` | Optional, for debugging. Pass `NULL` if `MR_USE_TASK_NAMES=0`. |
 | `entry` | `void func(void *arg)` — the task body. |
 | `arg` | Opaque pointer passed to `entry`. |
-| `priority` | `0..RTOS_MAX_PRIORITIES-1`. Lower = higher. |
+| `priority` | `0..MR_MAX_PRIORITIES-1`. Lower = higher. |
 | `stack` | Caller-allocated `uint8_t[]`. |
-| `stack_size` | `>= RTOS_MINIMAL_STACK_SIZE` (128 B on AVR). |
+| `stack_size` | `>= MR_MINIMAL_STACK_SIZE` (128 B on AVR). |
 
-Returns `RTOS_OK` on success, `RTOS_ERR_PARAM` on bad input.
+Returns `MR_OK` on success, `MR_ERR_PARAM` on bad input.
 
-## `rtos_task_delay`
+## `mr_task_delay`
 
 ```c
-void rtos_task_delay(uint32_t ticks);
+void mr_task_delay(uint32_t ticks);
 ```
 
-Blocks the calling task for `ticks` ticks. Use `RTOS_MS_TO_TICKS(ms)` for
+Blocks the calling task for `ticks` ticks. Use `MR_MS_TO_TICKS(ms)` for
 millisecond-friendly notation:
 
 ```c
-rtos_task_delay(RTOS_MS_TO_TICKS(500));    /* sleep 500 ms */
+mr_task_delay(MR_MS_TO_TICKS(500));    /* sleep 500 ms */
 ```
 
-A delay of 0 is equivalent to `rtos_task_yield()`.
+A delay of 0 is equivalent to `mr_task_yield()`.
 
-## `rtos_task_delay_until`
+## `mr_task_delay_until`
 
 ```c
-void rtos_task_delay_until(uint32_t *prev_wake, uint32_t increment);
+void mr_task_delay_until(uint32_t *prev_wake, uint32_t increment);
 ```
 
 Sleeps until exactly `*prev_wake + increment` ticks. Use this when you
-need periodic timing that doesn't drift (`rtos_task_delay` drifts by
+need periodic timing that doesn't drift (`mr_task_delay` drifts by
 your work time per cycle).
 
 ```c
-uint32_t next = rtos_tick_get();
+uint32_t next = mr_tick_get();
 while (1) {
     do_periodic_work();
-    rtos_task_delay_until(&next, RTOS_MS_TO_TICKS(50));   /* exactly 20 Hz */
+    mr_task_delay_until(&next, MR_MS_TO_TICKS(50));   /* exactly 20 Hz */
 }
 ```
 
-## `rtos_task_yield`
+## `mr_task_yield`
 
 ```c
-void rtos_task_yield(void);
+void mr_task_yield(void);
 ```
 
 Drops the calling task to the end of its priority's ready queue and runs
 the scheduler. Same-priority tasks will round-robin; higher-priority
 tasks would have preempted you already.
 
-## `rtos_task_suspend` / `rtos_task_resume`
+## `mr_task_suspend` / `mr_task_resume`
 
 ```c
-void rtos_task_suspend(rtos_tcb_t *tcb);
-void rtos_task_resume(rtos_tcb_t *tcb);
+void mr_task_suspend(mr_tcb_t *tcb);
+void mr_task_resume(mr_tcb_t *tcb);
 ```
 
 Removes a task from scheduling entirely. Suspended tasks are off all
@@ -85,10 +85,10 @@ lists until resumed.
 
 A task may suspend itself by passing its own TCB (or `NULL` for "self").
 
-## `rtos_task_priority_set`
+## `mr_task_priority_set`
 
 ```c
-rtos_status_t rtos_task_priority_set(rtos_tcb_t *tcb, uint8_t new_priority);
+mr_status_t mr_task_priority_set(mr_tcb_t *tcb, uint8_t new_priority);
 ```
 
 Changes a task's **base** priority. Does NOT override priority
@@ -96,19 +96,19 @@ inheritance — if the task is currently boosted because it holds a mutex
 contested by a higher-priority task, the inherited priority stays
 effective until the mutex is released.
 
-## `rtos_task_get_current`
+## `mr_task_get_current`
 
 ```c
-rtos_tcb_t *rtos_task_get_current(void);
+mr_tcb_t *mr_task_get_current(void);
 ```
 
 Returns the currently running task's TCB. Useful for "log who I am"
 patterns.
 
-## `rtos_task_get_stack_high_water`
+## `mr_task_get_stack_high_water`
 
 ```c
-uint16_t rtos_task_get_stack_high_water(rtos_tcb_t *tcb);
+uint16_t mr_task_get_stack_high_water(mr_tcb_t *tcb);
 ```
 
 Returns the number of stack bytes that remain unused (still hold the
@@ -117,30 +117,30 @@ Returns the number of stack bytes that remain unused (still hold the
 Call this in development to size stacks correctly:
 
 ```c
-uint16_t left = rtos_task_get_stack_high_water(&my_tcb);
+uint16_t left = mr_task_get_stack_high_water(&my_tcb);
 trace("task %s stack: %u bytes free", my_tcb.name, left);
 ```
 
 ## TCB structure
 
 ```c
-struct rtos_tcb {
+struct mr_tcb {
     void                *stack_ptr;       /* MUST be first */
     uint8_t              priority;
     uint8_t              base_priority;
-    rtos_task_state_t    state;
-    rtos_block_reason_t  block_reason;
+    mr_task_state_t    state;
+    mr_block_reason_t  block_reason;
     uint32_t             delay_ticks;
     uint32_t             wake_tick;
-    rtos_list_node_t     state_node;
-    rtos_list_node_t     event_node;
+    mr_list_node_t     state_node;
+    mr_list_node_t     event_node;
     void                *stack_base;
     uint16_t             stack_size;
     void                *blocked_on;
-#if RTOS_USE_TASK_NAMES
+#if MR_USE_TASK_NAMES
     const char          *name;
 #endif
-#if RTOS_USE_RUNTIME_STATS
+#if MR_USE_RUNTIME_STATS
     uint32_t             runtime_ticks;
     uint32_t             switch_in_tick;
 #endif

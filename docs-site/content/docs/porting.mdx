@@ -11,37 +11,37 @@ this guide walks through what the port layer must do.
 ## What the port owns
 
 The kernel is platform-agnostic except for one ~12-function interface
-defined in `include/rtos_port.h`. Implement that interface and you
+defined in `include/mr_port.h`. Implement that interface and you
 have a port.
 
 | Function | What it does |
 |---|---|
-| `rtos_port_init` | Configure the tick timer; disable interrupts |
-| `rtos_port_start_scheduler` | Restore the first task's context and `reti` |
-| `rtos_port_yield` | Save current context, switch task, restore |
-| `rtos_port_init_task_stack` | Build a fake interrupt frame for a new task |
-| `rtos_port_enter_critical` | Disable interrupts with nesting |
-| `rtos_port_exit_critical` | Re-enable when nesting hits zero |
-| `rtos_port_disable_interrupts` | Disable, return prior state |
-| `rtos_port_restore_interrupts` | Restore prior state |
-| `rtos_port_is_in_isr` | Tell the kernel which context we're in |
-| `rtos_port_check_stack_overflow` | Check SP vs base + canary at base |
+| `mr_port_init` | Configure the tick timer; disable interrupts |
+| `mr_port_start_scheduler` | Restore the first task's context and `reti` |
+| `mr_port_yield` | Save current context, switch task, restore |
+| `mr_port_init_task_stack` | Build a fake interrupt frame for a new task |
+| `mr_port_enter_critical` | Disable interrupts with nesting |
+| `mr_port_exit_critical` | Re-enable when nesting hits zero |
+| `mr_port_disable_interrupts` | Disable, return prior state |
+| `mr_port_restore_interrupts` | Restore prior state |
+| `mr_port_is_in_isr` | Tell the kernel which context we're in |
+| `mr_port_check_stack_overflow` | Check SP vs base + canary at base |
 | `ISR(timer_vector)` | The tick ISR — save/restore + tick_handler |
 
 ## File layout
 
 ```
-src/port/<your-target>/rtos_port_<target>.c
+src/port/<your-target>/mr_port_<target>.c
 ```
 
-Look at `src/port/avr/rtos_port_avr.c` (760 lines) and
-`src/port/arm/rtos_port_arm.c` (590 lines) for working references.
+Look at `src/port/avr/mr_port_avr.c` (760 lines) and
+`src/port/arm/mr_port_arm.c` (590 lines) for working references.
 
 ## The three things you must get right
 
 ### 1. The fake interrupt frame
 
-`rtos_port_init_task_stack` lays down bytes on a new task's stack so
+`mr_port_init_task_stack` lays down bytes on a new task's stack so
 that the very first `RESTORE_CONTEXT + reti` jumps cleanly into the
 task entry function.
 
@@ -73,7 +73,7 @@ SREG inside the ISR, the saved I bit is **0**. When you later restore
 a task that was last preempted by that ISR, you must arrange for `reti`
 (not plain `ret`) so the I bit is set on the way back out.
 
-The kernel's `rtos_port_yield` exits with explicit `reti` for exactly
+The kernel's `mr_port_yield` exits with explicit `reti` for exactly
 this reason — see the AVR port. Missing that detail manifests as
 "first task runs, second resume hangs because interrupts are off."
 
@@ -81,7 +81,7 @@ this reason — see the AVR port. Missing that detail manifests as
 
 Pick a timer that:
 
-- Can produce a stable `RTOS_TICK_RATE_HZ` rate (default 1 kHz)
+- Can produce a stable `MR_TICK_RATE_HZ` rate (default 1 kHz)
 - Doesn't conflict with peripherals you need
 - Has an interrupt vector you can claim
 
@@ -94,8 +94,8 @@ On Cortex-M we use SysTick — it's literally designed for this.
 
 <Steps>
   <Step>
-    **Copy a similar port.** Cortex-M? Start from `rtos_port_arm.c`.
-    Microchip 32-bit? Start from `rtos_port_avr.c` (closer in spirit
+    **Copy a similar port.** Cortex-M? Start from `mr_port_arm.c`.
+    Microchip 32-bit? Start from `mr_port_avr.c` (closer in spirit
     than Cortex-M because both have explicit context save/restore).
   </Step>
   <Step>
@@ -104,13 +104,13 @@ On Cortex-M we use SysTick — it's literally designed for this.
     callee-saved and which the ISR clobbers.
   </Step>
   <Step>
-    **Configure the tick timer** in `rtos_port_init`. Test by toggling
+    **Configure the tick timer** in `mr_port_init`. Test by toggling
     a pin from the ISR — get a stable 1 kHz square wave before
     anything else.
   </Step>
   <Step>
-    **Write `rtos_port_init_task_stack`** to lay down a fake frame.
-    Verify by single-stepping through `rtos_port_start_scheduler` →
+    **Write `mr_port_init_task_stack`** to lay down a fake frame.
+    Verify by single-stepping through `mr_port_start_scheduler` →
     `RESTORE_CONTEXT` → `reti` and watching PC land at the right spot.
   </Step>
   <Step>
@@ -131,7 +131,7 @@ On Cortex-M we use SysTick — it's literally designed for this.
 
     ```make
     ifeq ($(PLATFORM),mytarget)
-      CORE_SRCS += src/port/mytarget/rtos_port_mytarget.c
+      CORE_SRCS += src/port/mytarget/mr_port_mytarget.c
     endif
     ```
   </Step>
@@ -174,17 +174,17 @@ narrative.
 
 ## Multi-core (SMP)
 
-The SMP scaffolding is in `src/core/rtos_smp.c` but needs three
+The SMP scaffolding is in `src/core/mr_smp.c` but needs three
 platform-specific functions per target:
 
 ```c
-void     rtos_port_smp_start_core(uint8_t core_id,
+void     mr_port_smp_start_core(uint8_t core_id,
                                    void (*entry)(void),
                                    void *stack);
-uint8_t  rtos_port_smp_get_core_id(void);
-void     rtos_port_smp_send_ipi(uint8_t core_id, rtos_ipi_type_t type);
+uint8_t  mr_port_smp_get_core_id(void);
+void     mr_port_smp_send_ipi(uint8_t core_id, mr_ipi_type_t type);
 ```
 
 Plus per-core tick handling and IPI vectors. RP2040 is the easiest first
 target (clean documentation, simple multi-core API). Once any port has
-these, `RTOS_USE_SMP=1` works for that target.
+these, `MR_USE_SMP=1` works for that target.

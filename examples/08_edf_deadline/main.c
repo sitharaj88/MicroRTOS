@@ -14,10 +14,10 @@
  * SPDX-License-Identifier: MIT
  */
 
-#define RTOS_USE_EDF_SCHEDULER  1
+#define MR_USE_EDF_SCHEDULER  1
 
-#include "rtos.h"
-#include "rtos_deadline.h"
+#include "micrortos.h"
+#include "mr_deadline.h"
 
 #ifdef __AVR__
 #include <avr/io.h>
@@ -33,10 +33,10 @@
 /* Task Storage                                                               */
 /*===========================================================================*/
 
-static rtos_tcb_t fast_tcb;
+static mr_tcb_t fast_tcb;
 static uint8_t    fast_stack[160];
 
-static rtos_tcb_t slow_tcb;
+static mr_tcb_t slow_tcb;
 static uint8_t    slow_stack[160];
 
 static volatile uint16_t fast_jobs;
@@ -47,7 +47,7 @@ static volatile uint16_t deadline_misses;
 /* Deadline miss handler                                                      */
 /*===========================================================================*/
 
-static void on_deadline_miss(rtos_deadline_task_t *task)
+static void on_deadline_miss(mr_deadline_task_t *task)
 {
     (void)task;
     deadline_misses++;
@@ -69,10 +69,10 @@ static void fast_task(void *arg)
         LED_TOGGLE();
 
         /* Simulate work shorter than the WCET. */
-        rtos_task_delay(RTOS_MS_TO_TICKS(3));
+        mr_task_delay(MR_MS_TO_TICKS(3));
 
         fast_jobs++;
-        rtos_deadline_job_complete();
+        mr_deadline_job_complete();
     }
 }
 
@@ -83,10 +83,10 @@ static void slow_task(void *arg)
 {
     (void)arg;
     while (1) {
-        rtos_task_delay(RTOS_MS_TO_TICKS(15));
+        mr_task_delay(MR_MS_TO_TICKS(15));
 
         slow_jobs++;
-        rtos_deadline_job_complete();
+        mr_deadline_job_complete();
     }
 }
 
@@ -108,21 +108,21 @@ static void hardware_init(void)
 int main(void)
 {
     hardware_init();
-    rtos_kernel_init();
-    rtos_deadline_init();
+    mr_kernel_init();
+    mr_deadline_init();
 
-    rtos_task_create(&fast_tcb, "Fast", fast_task, NULL, 2,
+    mr_task_create(&fast_tcb, "Fast", fast_task, NULL, 2,
                      fast_stack, sizeof(fast_stack));
-    rtos_task_create(&slow_tcb, "Slow", slow_task, NULL, 2,
+    mr_task_create(&slow_tcb, "Slow", slow_task, NULL, 2,
                      slow_stack, sizeof(slow_stack));
 
     /* Register periodic timing parameters with the EDF scheduler. */
-    rtos_deadline_task_create(&fast_tcb, /*period*/50,  /*deadline*/40,  /*wcet*/5);
-    rtos_deadline_task_create(&slow_tcb, /*period*/200, /*deadline*/200, /*wcet*/20);
+    mr_deadline_task_create(&fast_tcb, /*period*/50,  /*deadline*/40,  /*wcet*/5);
+    mr_deadline_task_create(&slow_tcb, /*period*/200, /*deadline*/200, /*wcet*/20);
 
-    rtos_deadline_set_miss_callback(&fast_tcb, on_deadline_miss);
-    rtos_deadline_set_miss_callback(&slow_tcb, on_deadline_miss);
+    mr_deadline_set_miss_callback(&fast_tcb, on_deadline_miss);
+    mr_deadline_set_miss_callback(&slow_tcb, on_deadline_miss);
 
-    rtos_kernel_start();
+    mr_kernel_start();
     return 0;
 }

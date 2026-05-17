@@ -8,8 +8,8 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "rtos_types.h"
-#include "rtos_memory.h"
+#include "mr_types.h"
+#include "mr_memory.h"
 #include "host_stubs.h"
 #include "test_harness.h"
 
@@ -26,11 +26,11 @@ TEST_DEFINE_GLOBALS();
 #define POOL_BLOCK_SIZE     16
 #define POOL_BLOCK_COUNT    4
 
-static void setup(rtos_mempool_t *pool, uint8_t *buffer)
+static void setup(mr_mempool_t *pool, uint8_t *buffer)
 {
     host_stubs_reset();
     memset(buffer, 0xAA, POOL_BLOCK_SIZE * POOL_BLOCK_COUNT);
-    rtos_mempool_init(pool, buffer, POOL_BLOCK_SIZE, POOL_BLOCK_COUNT);
+    mr_mempool_init(pool, buffer, POOL_BLOCK_SIZE, POOL_BLOCK_COUNT);
 }
 
 /*===========================================================================*/
@@ -39,32 +39,32 @@ static void setup(rtos_mempool_t *pool, uint8_t *buffer)
 
 static void test_init(void)
 {
-    rtos_mempool_t pool;
+    mr_mempool_t pool;
     uint8_t buffer[POOL_BLOCK_SIZE * POOL_BLOCK_COUNT];
     setup(&pool, buffer);
 
-    CHECK(rtos_mempool_total(&pool) == POOL_BLOCK_COUNT);
-    CHECK(rtos_mempool_available(&pool) == POOL_BLOCK_COUNT);
-    CHECK(rtos_mempool_block_size(&pool) >= POOL_BLOCK_SIZE);
-    CHECK(!rtos_mempool_is_empty(&pool));
+    CHECK(mr_mempool_total(&pool) == POOL_BLOCK_COUNT);
+    CHECK(mr_mempool_available(&pool) == POOL_BLOCK_COUNT);
+    CHECK(mr_mempool_block_size(&pool) >= POOL_BLOCK_SIZE);
+    CHECK(!mr_mempool_is_empty(&pool));
 }
 
 static void test_alloc_until_empty(void)
 {
-    rtos_mempool_t pool;
+    mr_mempool_t pool;
     uint8_t buffer[POOL_BLOCK_SIZE * POOL_BLOCK_COUNT];
     void *blocks[POOL_BLOCK_COUNT];
     setup(&pool, buffer);
 
     for (int i = 0; i < POOL_BLOCK_COUNT; i++) {
-        blocks[i] = rtos_mempool_alloc(&pool, RTOS_NO_WAIT);
+        blocks[i] = mr_mempool_alloc(&pool, MR_NO_WAIT);
         CHECK(blocks[i] != NULL);
     }
-    CHECK(rtos_mempool_available(&pool) == 0);
-    CHECK(rtos_mempool_is_empty(&pool));
+    CHECK(mr_mempool_available(&pool) == 0);
+    CHECK(mr_mempool_is_empty(&pool));
 
     /* Pool exhausted: nowait alloc returns NULL and does NOT block. */
-    void *extra = rtos_mempool_alloc(&pool, RTOS_NO_WAIT);
+    void *extra = mr_mempool_alloc(&pool, MR_NO_WAIT);
     CHECK(extra == NULL);
     CHECK(host_stub_yield_count == 0);
     CHECK(host_stub_remove_ready_count == 0);
@@ -72,46 +72,46 @@ static void test_alloc_until_empty(void)
 
 static void test_alloc_free_roundtrip(void)
 {
-    rtos_mempool_t pool;
+    mr_mempool_t pool;
     uint8_t buffer[POOL_BLOCK_SIZE * POOL_BLOCK_COUNT];
     setup(&pool, buffer);
 
-    void *a = rtos_mempool_alloc(&pool, RTOS_NO_WAIT);
-    void *b = rtos_mempool_alloc(&pool, RTOS_NO_WAIT);
+    void *a = mr_mempool_alloc(&pool, MR_NO_WAIT);
+    void *b = mr_mempool_alloc(&pool, MR_NO_WAIT);
     CHECK(a != NULL && b != NULL && a != b);
-    CHECK(rtos_mempool_available(&pool) == POOL_BLOCK_COUNT - 2);
+    CHECK(mr_mempool_available(&pool) == POOL_BLOCK_COUNT - 2);
 
-    CHECK(rtos_mempool_free(&pool, a) == RTOS_OK);
-    CHECK(rtos_mempool_free(&pool, b) == RTOS_OK);
-    CHECK(rtos_mempool_available(&pool) == POOL_BLOCK_COUNT);
+    CHECK(mr_mempool_free(&pool, a) == MR_OK);
+    CHECK(mr_mempool_free(&pool, b) == MR_OK);
+    CHECK(mr_mempool_available(&pool) == POOL_BLOCK_COUNT);
 }
 
 static void test_free_rejects_out_of_range(void)
 {
-    rtos_mempool_t pool;
+    mr_mempool_t pool;
     uint8_t buffer[POOL_BLOCK_SIZE * POOL_BLOCK_COUNT];
     uint8_t bystander;
     setup(&pool, buffer);
 
-    CHECK(rtos_mempool_free(&pool, &bystander) == RTOS_ERR_PARAM);
-    CHECK(rtos_mempool_free(&pool, NULL) == RTOS_ERR_PARAM);
-    CHECK(rtos_mempool_available(&pool) == POOL_BLOCK_COUNT);
+    CHECK(mr_mempool_free(&pool, &bystander) == MR_ERR_PARAM);
+    CHECK(mr_mempool_free(&pool, NULL) == MR_ERR_PARAM);
+    CHECK(mr_mempool_available(&pool) == POOL_BLOCK_COUNT);
 }
 
 static void test_isr_alloc_and_free(void)
 {
-    rtos_mempool_t pool;
+    mr_mempool_t pool;
     uint8_t buffer[POOL_BLOCK_SIZE * POOL_BLOCK_COUNT];
     bool yield_needed = true;
     setup(&pool, buffer);
 
-    void *p = rtos_mempool_alloc_from_isr(&pool);
+    void *p = mr_mempool_alloc_from_isr(&pool);
     CHECK(p != NULL);
-    CHECK(rtos_mempool_available(&pool) == POOL_BLOCK_COUNT - 1);
+    CHECK(mr_mempool_available(&pool) == POOL_BLOCK_COUNT - 1);
 
-    rtos_status_t s = rtos_mempool_free_from_isr(&pool, p, &yield_needed);
-    CHECK(s == RTOS_OK);
-    CHECK(rtos_mempool_available(&pool) == POOL_BLOCK_COUNT);
+    mr_status_t s = mr_mempool_free_from_isr(&pool, p, &yield_needed);
+    CHECK(s == MR_OK);
+    CHECK(mr_mempool_available(&pool) == POOL_BLOCK_COUNT);
     /* No waiters were registered, so no yield should be required. */
     CHECK(yield_needed == false);
 }

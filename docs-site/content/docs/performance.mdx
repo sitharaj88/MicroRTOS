@@ -21,24 +21,24 @@ Every number on this page comes from a clean release build
 
 ## Per-module breakdown
 
-Sizes for the object files in `build/librtos.a` (release `-Os`):
+Sizes for the object files in `build/libmicrortos.a` (release `-Os`):
 
 | Module | Flash (text) | Notes |
 |---|---|---|
-| `rtos_task` | 2,280 B | Task create/delay/yield/suspend |
-| `rtos_safety` | 2,688 B | Optional; safety/diag helpers |
-| `rtos_queue` | 2,475 B | Message queues |
-| `rtos_lockfree` | 2,311 B | SPSC/MPSC/stack |
-| `rtos_event` | 1,344 B | Event groups |
-| `rtos_mempool` | 1,164 B | Memory pools |
-| `rtos_mutex` | 980 B | With priority inheritance |
-| `rtos_timer` | 976 B | Software timers |
-| `rtos_semaphore` | 972 B | Binary + counting |
-| `rtos_list` | 929 B | Intrusive doubly-linked lists |
-| `rtos_scheduler` | 928 B | Bitmap + ready queues |
-| `rtos_port_avr` | 744 B | AVR context switch |
-| `rtos_kernel` | 707 B | Globals + idle TCB + tick handler |
-| `rtos_async` | 482 B | Coroutine runner |
+| `mr_task` | 2,280 B | Task create/delay/yield/suspend |
+| `mr_safety` | 2,688 B | Optional; safety/diag helpers |
+| `mr_queue` | 2,475 B | Message queues |
+| `mr_lockfree` | 2,311 B | SPSC/MPSC/stack |
+| `mr_event` | 1,344 B | Event groups |
+| `mr_mempool` | 1,164 B | Memory pools |
+| `mr_mutex` | 980 B | With priority inheritance |
+| `mr_timer` | 976 B | Software timers |
+| `mr_semaphore` | 972 B | Binary + counting |
+| `mr_list` | 929 B | Intrusive doubly-linked lists |
+| `mr_scheduler` | 928 B | Bitmap + ready queues |
+| `mr_port_avr` | 744 B | AVR context switch |
+| `mr_kernel` | 707 B | Globals + idle TCB + tick handler |
+| `mr_async` | 482 B | Coroutine runner |
 | Stubs (EDF, MPU, SMP, WD, trace, ZC) | 0–83 B each | Empty when feature disabled |
 
 The linker uses `-Wl,--gc-sections` and `-ffunction-sections` so any
@@ -98,18 +98,18 @@ Even the largest example fits comfortably on an Uno (32 KB flash,
 
 ## Cost of advanced features
 
-Each `RTOS_USE_*` flag adds code only when enabled. Approximate deltas
+Each `MR_USE_*` flag adds code only when enabled. Approximate deltas
 on ATmega328P:
 
 | Flag | Flash add | SRAM add |
 |---|---:|---:|
-| `RTOS_USE_EDF_SCHEDULER` | ~1.3 KB | ~50 B + per-task params |
-| `RTOS_USE_WATCHDOG` | ~400 B | minimal |
-| `RTOS_USE_TASK_WATCHDOG` | ~500 B | per-task state |
-| `RTOS_USE_TRACING` | ~800 B | configurable buffer |
-| `RTOS_USE_ZEROCOPY` | ~1 KB | pool memory you allocate |
-| `RTOS_USE_MPU` | ARM only | per-task MPU regions |
-| `RTOS_USE_SMP` | ARM SMP only | per-core state |
+| `MR_USE_EDF_SCHEDULER` | ~1.3 KB | ~50 B + per-task params |
+| `MR_USE_WATCHDOG` | ~400 B | minimal |
+| `MR_USE_TASK_WATCHDOG` | ~500 B | per-task state |
+| `MR_USE_TRACING` | ~800 B | configurable buffer |
+| `MR_USE_ZEROCOPY` | ~1 KB | pool memory you allocate |
+| `MR_USE_MPU` | ARM only | per-task MPU regions |
+| `MR_USE_SMP` | ARM SMP only | per-core state |
 
 ## Compared to FreeRTOS
 
@@ -120,7 +120,7 @@ For roughly the same feature set (scheduler + mutex + queue + timer):
 | Min flash (AVR `-Os`) | ~3.5 KB | ~5–8 KB |
 | Min SRAM (excluding stacks) | ~250 B | ~250 B |
 | TCB size (default opts) | 61 B | ~50–80 B |
-| Feature gates | Per-feature `RTOS_USE_*` | FreeRTOSConfig.h |
+| Feature gates | Per-feature `MR_USE_*` | FreeRTOSConfig.h |
 | Hardware-validated | Yes (Uno) | Yes (many) |
 | Audit surface | ~5 KLOC | ~20 KLOC |
 
@@ -131,13 +131,13 @@ you can read the entire kernel in an afternoon.
 
 Most-impact first:
 
-1. **Tune stack sizes.** Use `rtos_task_get_stack_high_water` to find
+1. **Tune stack sizes.** Use `mr_task_get_stack_high_water` to find
    the actual usage and trim. Often saves 30–50% of SRAM.
-2. **Drop `RTOS_USE_TASK_NAMES`** — save 2 B per TCB plus the string
+2. **Drop `MR_USE_TASK_NAMES`** — save 2 B per TCB plus the string
    table.
-3. **Drop `RTOS_USE_RUNTIME_STATS`** — 8 B per TCB.
-4. **Drop `RTOS_USE_TASK_NOTIFICATIONS`** — 5 B per TCB.
-5. **Lower `RTOS_MAX_PRIORITIES`** from 8 to 4 — save 24 B SRAM on the
+3. **Drop `MR_USE_RUNTIME_STATS`** — 8 B per TCB.
+4. **Drop `MR_USE_TASK_NOTIFICATIONS`** — 5 B per TCB.
+5. **Lower `MR_MAX_PRIORITIES`** from 8 to 4 — save 24 B SRAM on the
    ready-list array.
 6. **Disable timeslicing** if all your same-priority tasks cooperate.
 7. **Disable the timer module** if you don't use software timers —

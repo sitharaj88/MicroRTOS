@@ -7,7 +7,7 @@ icon: Code2
 The full public surface is exposed by a single header:
 
 ```c
-#include "rtos.h"
+#include "micrortos.h"
 ```
 
 Internally that pulls in everything else. You don't need to include
@@ -33,11 +33,11 @@ sub-headers individually.
 
 All public functions follow the same conventions:
 
-- **Return type `rtos_status_t`** — `RTOS_OK` (0) on success, one of the
+- **Return type `mr_status_t`** — `MR_OK` (0) on success, one of the
   error constants otherwise.
 - **Timeout argument** — milliseconds expressed as ticks via
-  `RTOS_MS_TO_TICKS(ms)`. `RTOS_NO_WAIT` (0) for non-blocking,
-  `RTOS_WAIT_FOREVER` (`UINT32_MAX`) for indefinite.
+  `MR_MS_TO_TICKS(ms)`. `MR_NO_WAIT` (0) for non-blocking,
+  `MR_WAIT_FOREVER` (`UINT32_MAX`) for indefinite.
 - **`_from_isr` variants** — call these from interrupt context. They
   never block and may set a `*yield_required` flag if a context switch
   should follow.
@@ -46,16 +46,16 @@ All public functions follow the same conventions:
 
 ```c
 typedef enum {
-    RTOS_OK              = 0,
-    RTOS_ERR_TIMEOUT     = 1,
-    RTOS_ERR_FULL        = 2,
-    RTOS_ERR_EMPTY       = 3,
-    RTOS_ERR_PARAM       = 4,
-    RTOS_ERR_STATE       = 5,
-    RTOS_ERR_NOMEM       = 6,
-    RTOS_ERR_DELETED     = 7,
-    RTOS_ERR_ISR         = 8,
-} rtos_status_t;
+    MR_OK              = 0,
+    MR_ERR_TIMEOUT     = 1,
+    MR_ERR_FULL        = 2,
+    MR_ERR_EMPTY       = 3,
+    MR_ERR_PARAM       = 4,
+    MR_ERR_STATE       = 5,
+    MR_ERR_NOMEM       = 6,
+    MR_ERR_DELETED     = 7,
+    MR_ERR_ISR         = 8,
+} mr_status_t;
 ```
 
 Check the return value. The kernel never sets `errno`.
@@ -63,27 +63,27 @@ Check the return value. The kernel never sets `errno`.
 ## Time
 
 ```c
-#define RTOS_MS_TO_TICKS(ms)    (((uint32_t)(ms) * RTOS_TICK_RATE_HZ) / 1000U)
-#define RTOS_TICKS_TO_MS(t)     ((uint32_t)(t) * 1000U / RTOS_TICK_RATE_HZ)
+#define MR_MS_TO_TICKS(ms)    (((uint32_t)(ms) * MR_TICK_RATE_HZ) / 1000U)
+#define MR_TICKS_TO_MS(t)     ((uint32_t)(t) * 1000U / MR_TICK_RATE_HZ)
 
-#define RTOS_WAIT_FOREVER       ((uint32_t)0xFFFFFFFF)
-#define RTOS_NO_WAIT            ((uint32_t)0)
+#define MR_WAIT_FOREVER       ((uint32_t)0xFFFFFFFF)
+#define MR_NO_WAIT            ((uint32_t)0)
 
-uint32_t rtos_tick_get(void);   /* free-running 32-bit tick counter */
+uint32_t mr_tick_get(void);   /* free-running 32-bit tick counter */
 ```
 
 ## Headers, by module
 
 | Module | Public header |
 |---|---|
-| Kernel | `include/rtos.h` |
-| Tasks | `include/rtos_task.h` |
-| Mutex | `include/rtos_mutex.h` |
-| Semaphore | `include/rtos_semaphore.h` |
-| Event | `include/rtos_event.h` |
-| Queue | `include/rtos_queue.h` |
-| Memory pool | `include/rtos_memory.h` |
-| Timer | `include/rtos_timer.h` |
-| Deadline | `include/rtos_deadline.h` |
-| Tickless | `include/rtos_tickless.h` |
-| Port | `include/rtos_port.h` |
+| Kernel | `include/micrortos.h` |
+| Tasks | `include/mr_task.h` |
+| Mutex | `include/mr_mutex.h` |
+| Semaphore | `include/mr_semaphore.h` |
+| Event | `include/mr_event.h` |
+| Queue | `include/mr_queue.h` |
+| Memory pool | `include/mr_memory.h` |
+| Timer | `include/mr_timer.h` |
+| Deadline | `include/mr_deadline.h` |
+| Tickless | `include/mr_tickless.h` |
+| Port | `include/mr_port.h` |

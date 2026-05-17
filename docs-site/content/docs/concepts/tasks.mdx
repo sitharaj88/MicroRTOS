@@ -9,38 +9,38 @@ to another is just saving one register set and restoring another.
 
 ## The TCB
 
-`rtos_tcb_t` is the per-task control block. Its layout matters because the
+`mr_tcb_t` is the per-task control block. Its layout matters because the
 port assembly accesses fields by offset:
 
 ```c
-struct rtos_tcb {
+struct mr_tcb {
     void              *stack_ptr;       /* offset 0 — MUST be first */
     uint8_t            priority;
     uint8_t            base_priority;
-    rtos_task_state_t  state;
-    rtos_block_reason_t block_reason;
+    mr_task_state_t  state;
+    mr_block_reason_t block_reason;
     uint32_t           delay_ticks;
     uint32_t           wake_tick;
-    rtos_list_node_t   state_node;      /* ready or delayed list */
-    rtos_list_node_t   event_node;      /* mutex/sem/queue wait list */
+    mr_list_node_t   state_node;      /* ready or delayed list */
+    mr_list_node_t   event_node;      /* mutex/sem/queue wait list */
     void              *stack_base;
     uint16_t           stack_size;
     void              *blocked_on;
-    /* optional fields gated by RTOS_USE_* flags */
+    /* optional fields gated by MR_USE_* flags */
 };
 ```
 
 A TCB is **61 bytes** on AVR with default options. Disable
-`RTOS_USE_TASK_NAMES`, `RTOS_USE_RUNTIME_STATS`, and
-`RTOS_USE_TASK_NOTIFICATIONS` to drop to ~45 bytes per task.
+`MR_USE_TASK_NAMES`, `MR_USE_RUNTIME_STATS`, and
+`MR_USE_TASK_NOTIFICATIONS` to drop to ~45 bytes per task.
 
 ## Creating a task
 
 ```c
-static rtos_tcb_t  my_tcb;
+static mr_tcb_t  my_tcb;
 static uint8_t     my_stack[128];
 
-rtos_task_create(&my_tcb,
+mr_task_create(&my_tcb,
                  "name",        /* optional, for debugging */
                  my_func,       /* entry function */
                  NULL,          /* arg passed to entry */
@@ -49,20 +49,20 @@ rtos_task_create(&my_tcb,
                  sizeof(my_stack));
 ```
 
-`rtos_task_create` does five things:
+`mr_task_create` does five things:
 
-1. Validates priority and stack size (`RTOS_MINIMAL_STACK_SIZE` minimum).
+1. Validates priority and stack size (`MR_MINIMAL_STACK_SIZE` minimum).
 2. Zeros the TCB.
 3. Fills the stack with `0xA5` for overflow detection.
 4. Builds a fake interrupt frame at the top of the stack via
-   `rtos_port_init_task_stack` — when the scheduler does its first
+   `mr_port_init_task_stack` — when the scheduler does its first
    `RESTORE_CONTEXT + reti`, control jumps cleanly into your entry
    function.
 5. Adds the task to the ready list at its priority.
 
 ## Sizing stacks
 
-Start with `RTOS_MINIMAL_STACK_SIZE` (128 B on AVR) and measure. The
+Start with `MR_MINIMAL_STACK_SIZE` (128 B on AVR) and measure. The
 worst-case stack usage is approximately:
 
 ```
@@ -79,7 +79,7 @@ to 256 B.
 To check actual high-water mark at runtime:
 
 ```c
-uint16_t unused = rtos_task_get_stack_high_water(&my_tcb);
+uint16_t unused = mr_task_get_stack_high_water(&my_tcb);
 ```
 
 This counts how many `0xA5` bytes are still untouched at the bottom of
@@ -87,24 +87,24 @@ the stack — a direct measure of slack.
 
 ## The idle task
 
-`rtos_kernel_init()` creates one task implicitly: the idle task. It runs
+`mr_kernel_init()` creates one task implicitly: the idle task. It runs
 when nothing else is ready. By default it's a simple `while (1) { }`. You
 can hook it for power management:
 
 ```c
 // In your application:
-void rtos_idle_hook(void) {
+void mr_idle_hook(void) {
     // Called from the idle task. Sleep, lower clock, whatever.
 }
 ```
 
-Enable the hook with `#define RTOS_USE_IDLE_HOOK 1`.
+Enable the hook with `#define MR_USE_IDLE_HOOK 1`.
 
 ## Suspending and resuming
 
 ```c
-rtos_task_suspend(&my_tcb);   /* removes from ready/delayed lists */
-rtos_task_resume(&my_tcb);    /* puts back on ready list */
+mr_task_suspend(&my_tcb);   /* removes from ready/delayed lists */
+mr_task_resume(&my_tcb);    /* puts back on ready list */
 ```
 
 A suspended task is off all lists. The scheduler ignores it entirely
@@ -113,7 +113,7 @@ until you resume it.
 ## Yielding cooperatively
 
 ```c
-rtos_task_yield();
+mr_task_yield();
 ```
 
 Drops the calling task to the end of its priority's ready list and runs
@@ -123,17 +123,17 @@ tasks would have preempted you already.
 ## Lifecycle in one diagram
 
 ```
-rtos_task_create
+mr_task_create
        │
        ▼
    ┌─READY──────┐
    │            │ scheduler picks
    │            ▼
-   │       RUNNING ─── rtos_task_delay ──► BLOCKED ── tick due
+   │       RUNNING ─── mr_task_delay ──► BLOCKED ── tick due
    │            │                              │
-   │            └─ rtos_task_yield ──► READY   │
+   │            └─ mr_task_yield ──► READY   │
    │                                           │
    └───────────────────────────────────────────┘
 
-   rtos_task_suspend ──► SUSPENDED ──► rtos_task_resume ──► READY
+   mr_task_suspend ──► SUSPENDED ──► mr_task_resume ──► READY
 ```

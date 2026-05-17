@@ -3,46 +3,46 @@ title: Tickless
 description: Long idle sleeps with the tick suppressed.
 ---
 
-Enabled by `RTOS_USE_TICKLESS_IDLE=1`.
+Enabled by `MR_USE_TICKLESS_IDLE=1`.
 
-## `rtos_tickless_init`
+## `mr_tickless_init`
 
 ```c
-void rtos_tickless_init(void);
+void mr_tickless_init(void);
 ```
 
-Initializes tickless state. Call after `rtos_kernel_init` and before
-`rtos_kernel_start`.
+Initializes tickless state. Call after `mr_kernel_init` and before
+`mr_kernel_start`.
 
-## `rtos_tickless_enable`
+## `mr_tickless_enable`
 
 ```c
-void rtos_tickless_enable(bool enable);
+void mr_tickless_enable(bool enable);
 ```
 
 Master switch. Disable to fall back to regular periodic ticking
 (useful for debugging timing-sensitive code).
 
-## `rtos_tickless_set_sleep_mode`
+## `mr_tickless_set_sleep_mode`
 
 ```c
 typedef enum {
-    RTOS_SLEEP_IDLE,        /* CPU stops; peripherals run */
-    RTOS_SLEEP_ADC,
-    RTOS_SLEEP_STANDBY,
-    RTOS_SLEEP_POWER_DOWN,  /* deepest; external wake only */
-} rtos_sleep_mode_t;
+    MR_SLEEP_IDLE,        /* CPU stops; peripherals run */
+    MR_SLEEP_ADC,
+    MR_SLEEP_STANDBY,
+    MR_SLEEP_POWER_DOWN,  /* deepest; external wake only */
+} mr_sleep_mode_t;
 
-void rtos_tickless_set_sleep_mode(rtos_sleep_mode_t mode);
+void mr_tickless_set_sleep_mode(mr_sleep_mode_t mode);
 ```
 
 Pick the deepest sleep mode your wake sources support.
 
-## Hooks (`RTOS_USE_TICKLESS_HOOKS=1`)
+## Hooks (`MR_USE_TICKLESS_HOOKS=1`)
 
 ```c
-void rtos_tickless_pre_sleep_hook(uint32_t expected_ticks);
-void rtos_tickless_post_sleep_hook(uint32_t slept_ticks);
+void mr_tickless_pre_sleep_hook(uint32_t expected_ticks);
+void mr_tickless_post_sleep_hook(uint32_t slept_ticks);
 ```
 
 Implement to power-manage peripherals around each sleep cycle.
@@ -50,16 +50,16 @@ Implement to power-manage peripherals around each sleep cycle.
 ## Statistics
 
 ```c
-uint32_t rtos_tickless_get_sleep_count(void);
-uint32_t rtos_tickless_get_total_slept(void);
+uint32_t mr_tickless_get_sleep_count(void);
+uint32_t mr_tickless_get_total_slept(void);
 ```
 
 ## Tunables
 
 ```c
-#define RTOS_USE_TICKLESS_IDLE   1
-#define RTOS_TICKLESS_MIN_TICKS  2     /* don't go tickless for shorter sleeps */
-#define RTOS_TICKLESS_MAX_TICKS  1000  /* hardware timer ceiling */
+#define MR_USE_TICKLESS_IDLE   1
+#define MR_TICKLESS_MIN_TICKS  2     /* don't go tickless for shorter sleeps */
+#define MR_TICKLESS_MAX_TICKS  1000  /* hardware timer ceiling */
 ```
 
 ## Example

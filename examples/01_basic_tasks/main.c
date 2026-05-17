@@ -14,7 +14,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "rtos.h"
+#include "micrortos.h"
 
 #ifdef __AVR__
 #include <avr/io.h>
@@ -29,11 +29,11 @@
 /*===========================================================================*/
 
 /* Task 1: Blinks LED at 500ms interval */
-static rtos_tcb_t task1_tcb;
+static mr_tcb_t task1_tcb;
 static uint8_t task1_stack[128];
 
 /* Task 2: Blinks LED2 at 250ms interval (higher priority) */
-static rtos_tcb_t task2_tcb;
+static mr_tcb_t task2_tcb;
 static uint8_t task2_stack[128];
 
 /*===========================================================================*/
@@ -54,7 +54,7 @@ static void task1_func(void *arg)
 #endif
 
         /* Delay 500ms */
-        rtos_task_delay(RTOS_MS_TO_TICKS(500));
+        mr_task_delay(MR_MS_TO_TICKS(500));
     }
 }
 
@@ -72,7 +72,7 @@ static void task2_func(void *arg)
 #endif
 
         /* Delay 250ms */
-        rtos_task_delay(RTOS_MS_TO_TICKS(250));
+        mr_task_delay(MR_MS_TO_TICKS(250));
     }
 }
 
@@ -101,10 +101,10 @@ int main(void)
     hardware_init();
 
     /* Initialize the RTOS kernel */
-    rtos_kernel_init();
+    mr_kernel_init();
 
     /* Create Task 1: Slow blink, priority 2 (lower) */
-    rtos_task_create(
+    mr_task_create(
         &task1_tcb,
         "Blink1",
         task1_func,
@@ -115,7 +115,7 @@ int main(void)
     );
 
     /* Create Task 2: Fast blink, priority 1 (higher) */
-    rtos_task_create(
+    mr_task_create(
         &task2_tcb,
         "Blink2",
         task2_func,
@@ -126,7 +126,7 @@ int main(void)
     );
 
     /* Start the scheduler - this function never returns */
-    rtos_kernel_start();
+    mr_kernel_start();
 
     /* Should never reach here */
     return 0;

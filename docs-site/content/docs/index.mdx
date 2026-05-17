@@ -23,10 +23,10 @@ MISRA C:2012.
 ## What makes it different
 
 - **Hardware-validated** — every release is flashed to an Uno and proven to
-  blink with `rtos_task_delay`. Not just "compiles clean."
-- **Pay-as-you-go features** — `RTOS_USE_*` flags gate every advanced module.
+  blink with `mr_task_delay`. Not just "compiles clean."
+- **Pay-as-you-go features** — `MR_USE_*` flags gate every advanced module.
   Disabled features cost zero bytes; the linker strips them.
-- **Single header** — `#include "rtos.h"` is the entire public surface.
+- **Single header** — `#include "micrortos.h"` is the entire public surface.
 - **Static allocation** — no `malloc`. Every TCB and stack is `static uint8_t`
   in your code, sized at compile time.
 - **Two ports today** — AVR (ATmega328P, ATmega2560, ATmega32U4) and

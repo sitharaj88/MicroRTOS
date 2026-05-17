@@ -14,11 +14,11 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "rtos.h"
+#include "micrortos.h"
 
 /* Ensure tickless is enabled */
-#if !RTOS_USE_TICKLESS_IDLE
-    #warning "This example requires RTOS_USE_TICKLESS_IDLE=1 in rtos_config.h"
+#if !MR_USE_TICKLESS_IDLE
+    #warning "This example requires MR_USE_TICKLESS_IDLE=1 in mr_config.h"
 #endif
 
 #ifdef __AVR__
@@ -41,11 +41,11 @@
 /*===========================================================================*/
 
 /* Sensor task - samples periodically with long sleep between */
-static rtos_tcb_t sensor_tcb;
+static mr_tcb_t sensor_tcb;
 static uint8_t sensor_stack[192];
 
 /* Monitor task - wakes up occasionally to check system health */
-static rtos_tcb_t monitor_tcb;
+static mr_tcb_t monitor_tcb;
 static uint8_t monitor_stack[192];
 
 /*===========================================================================*/
@@ -71,7 +71,7 @@ static void sensor_task(void *arg)
     uint32_t sample_value = 0;
 
     while (1) {
-        wake_tick = rtos_tick_get();
+        wake_tick = mr_tick_get();
 
         /* Indicate sensor activity */
         LED_ON();
@@ -89,19 +89,19 @@ static void sensor_task(void *arg)
         sensor_readings++;
 
         /* Simulate processing time */
-        rtos_task_delay(RTOS_MS_TO_TICKS(50));
+        mr_task_delay(MR_MS_TO_TICKS(50));
 
         LED_OFF();
 
         /* Track active time */
-        total_active_ticks += (rtos_tick_get() - wake_tick);
+        total_active_ticks += (mr_tick_get() - wake_tick);
 
         /*
          * Sleep for 5 seconds.
          * During this time, the RTOS will enter tickless idle mode
          * and stop the periodic tick interrupt to save power.
          */
-        rtos_task_delay(RTOS_MS_TO_TICKS(5000));
+        mr_task_delay(MR_MS_TO_TICKS(5000));
     }
 }
 
@@ -132,22 +132,22 @@ static void monitor_task(void *arg)
 
         /* Brief LED flash to indicate monitor activity */
         LED_TOGGLE();
-        rtos_task_delay(RTOS_MS_TO_TICKS(10));
+        mr_task_delay(MR_MS_TO_TICKS(10));
         LED_TOGGLE();
 
-#if RTOS_USE_TICKLESS_IDLE
+#if MR_USE_TICKLESS_IDLE
         /*
          * Report tickless statistics.
          * In a real app, this could go to serial or be logged.
          */
-        uint32_t sleep_count = rtos_tickless_get_sleep_count();
-        uint32_t total_slept = rtos_tickless_get_total_slept();
+        uint32_t sleep_count = mr_tickless_get_sleep_count();
+        uint32_t total_slept = mr_tickless_get_total_slept();
         (void)sleep_count;
         (void)total_slept;
 #endif
 
         /* Sleep for 30 seconds */
-        rtos_task_delay(RTOS_MS_TO_TICKS(30000));
+        mr_task_delay(MR_MS_TO_TICKS(30000));
     }
 }
 
@@ -155,13 +155,13 @@ static void monitor_task(void *arg)
 /* Tickless Hooks (Optional)                                                  */
 /*===========================================================================*/
 
-#if RTOS_USE_TICKLESS_HOOKS
+#if MR_USE_TICKLESS_HOOKS
 
 /**
  * Called before entering tickless sleep.
  * Prepare peripherals for low power mode.
  */
-void rtos_tickless_pre_sleep_hook(uint32_t expected_ticks)
+void mr_tickless_pre_sleep_hook(uint32_t expected_ticks)
 {
     (void)expected_ticks;
 
@@ -178,7 +178,7 @@ void rtos_tickless_pre_sleep_hook(uint32_t expected_ticks)
  * Called after waking from tickless sleep.
  * Restore peripheral states.
  */
-void rtos_tickless_post_sleep_hook(uint32_t slept_ticks)
+void mr_tickless_post_sleep_hook(uint32_t slept_ticks)
 {
     (void)slept_ticks;
 
@@ -190,7 +190,7 @@ void rtos_tickless_post_sleep_hook(uint32_t slept_ticks)
      */
 }
 
-#endif /* RTOS_USE_TICKLESS_HOOKS */
+#endif /* MR_USE_TICKLESS_HOOKS */
 
 /*===========================================================================*/
 /* Hardware Setup                                                             */
@@ -217,27 +217,27 @@ int main(void)
     hardware_init();
 
     /* Initialize the RTOS kernel */
-    rtos_kernel_init();
+    mr_kernel_init();
 
-#if RTOS_USE_TICKLESS_IDLE
+#if MR_USE_TICKLESS_IDLE
     /* Initialize and enable tickless mode */
-    rtos_tickless_init();
-    rtos_tickless_enable(true);
+    mr_tickless_init();
+    mr_tickless_enable(true);
 
     /* Use idle sleep mode (fastest wake, moderate power savings) */
-    rtos_tickless_set_sleep_mode(RTOS_SLEEP_IDLE);
+    mr_tickless_set_sleep_mode(MR_SLEEP_IDLE);
 
     /*
      * For deeper sleep (more power savings, slower wake):
-     * rtos_tickless_set_sleep_mode(RTOS_SLEEP_STANDBY);
+     * mr_tickless_set_sleep_mode(MR_SLEEP_STANDBY);
      *
      * For deepest sleep (best power savings, slowest wake):
-     * rtos_tickless_set_sleep_mode(RTOS_SLEEP_POWER_DOWN);
+     * mr_tickless_set_sleep_mode(MR_SLEEP_POWER_DOWN);
      */
 #endif
 
     /* Create sensor task (priority 3) */
-    rtos_task_create(
+    mr_task_create(
         &sensor_tcb,
         "Sensor",
         sensor_task,
@@ -248,7 +248,7 @@ int main(void)
     );
 
     /* Create monitor task (priority 4, lower than sensor) */
-    rtos_task_create(
+    mr_task_create(
         &monitor_tcb,
         "Monitor",
         monitor_task,
@@ -259,7 +259,7 @@ int main(void)
     );
 
     /* Start the scheduler */
-    rtos_kernel_start();
+    mr_kernel_start();
 
     return 0;
 }

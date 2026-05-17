@@ -44,14 +44,14 @@ F_CPU = 16000000UL
 
 # Base flags (GNU C11 for embedded compatibility)
 CFLAGS_BASE = -c -std=gnu11 -ffunction-sections -fdata-sections
-CFLAGS_BASE += -mmcu=$(MCU) -DF_CPU=$(F_CPU) -DRTOS_PLATFORM_AVR=1
+CFLAGS_BASE += -mmcu=$(MCU) -DF_CPU=$(F_CPU) -DMR_PLATFORM_AVR=1
 CFLAGS_BASE += -I./include
 
 # Release flags (optimized, minimal warnings)
 CFLAGS_RELEASE = $(CFLAGS_BASE) -Os -w -DNDEBUG
 
 # Debug flags (with assertions and debug info)
-CFLAGS_DEBUG = $(CFLAGS_BASE) -Og -g3 -DRTOS_USE_ASSERT=1 -DRTOS_SAFETY_ENABLE=1
+CFLAGS_DEBUG = $(CFLAGS_BASE) -Og -g3 -DMR_USE_ASSERT=1 -DMR_SAFETY_ENABLE=1
 
 # MISRA/Strict warning flags (for static analysis compliance)
 CFLAGS_STRICT = $(CFLAGS_BASE) -O2 -g
@@ -76,7 +76,7 @@ ANALYZER ?= 0
 ifeq ($(ANALYZER),1)
 CFLAGS_STRICT += -fanalyzer
 endif
-CFLAGS_STRICT += -DRTOS_USE_ASSERT=1 -DRTOS_SAFETY_ENABLE=1
+CFLAGS_STRICT += -DMR_USE_ASSERT=1 -DMR_SAFETY_ENABLE=1
 
 # Default to release build
 CFLAGS = $(CFLAGS_RELEASE)
@@ -90,49 +90,49 @@ BUILD_DIR = build
 
 # Source files
 CORE_SRCS = \
-	src/core/rtos_list.c \
-	src/core/rtos_task.c \
-	src/core/rtos_scheduler.c \
-	src/core/rtos_kernel.c \
-	src/core/rtos_lockfree.c \
-	src/core/rtos_tickless.c \
-	src/core/rtos_async.c \
-	src/core/rtos_deadline.c \
-	src/core/rtos_mpu.c \
-	src/core/rtos_smp.c \
-	src/sync/rtos_mutex.c \
-	src/sync/rtos_semaphore.c \
-	src/sync/rtos_event.c \
-	src/ipc/rtos_queue.c \
-	src/ipc/rtos_zerocopy.c \
-	src/time/rtos_timer.c \
-	src/memory/rtos_mempool.c \
-	src/diag/rtos_trace.c \
-	src/diag/rtos_watchdog.c \
-	src/diag/rtos_safety.c \
-	src/port/avr/rtos_port_avr.c
+	src/core/mr_list.c \
+	src/core/mr_task.c \
+	src/core/mr_scheduler.c \
+	src/core/mr_kernel.c \
+	src/core/mr_lockfree.c \
+	src/core/mr_tickless.c \
+	src/core/mr_async.c \
+	src/core/mr_deadline.c \
+	src/core/mr_mpu.c \
+	src/core/mr_smp.c \
+	src/sync/mr_mutex.c \
+	src/sync/mr_semaphore.c \
+	src/sync/mr_event.c \
+	src/ipc/mr_queue.c \
+	src/ipc/mr_zerocopy.c \
+	src/time/mr_timer.c \
+	src/memory/mr_mempool.c \
+	src/diag/mr_trace.c \
+	src/diag/mr_watchdog.c \
+	src/diag/mr_safety.c \
+	src/port/avr/mr_port_avr.c
 
 # Header files (for dependency tracking)
 HEADERS = \
-	include/rtos.h \
-	include/rtos_config.h \
-	include/rtos_types.h \
-	include/rtos_misra.h \
-	include/rtos_safety.h \
-	include/rtos_port.h \
-	include/rtos_list.h \
-	include/rtos_task.h
+	include/micrortos.h \
+	include/mr_config.h \
+	include/mr_types.h \
+	include/mr_misra.h \
+	include/mr_safety.h \
+	include/mr_port.h \
+	include/mr_list.h \
+	include/mr_task.h
 
 # Object files
 CORE_OBJS = $(CORE_SRCS:%.c=$(BUILD_DIR)/%.o)
 
 # Library
-RTOS_LIB = $(BUILD_DIR)/librtos.a
+MR_LIB = $(BUILD_DIR)/libmicrortos.a
 
 # Default target
-all: $(BUILD_DIR) $(RTOS_LIB)
+all: $(BUILD_DIR) $(MR_LIB)
 	@echo "Build complete!"
-	@$(SIZE) $(RTOS_LIB) || true
+	@$(SIZE) $(MR_LIB) || true
 
 # Create build directories
 $(BUILD_DIR):
@@ -146,7 +146,7 @@ $(BUILD_DIR):
 	@mkdir -p $(BUILD_DIR)/examples
 
 # Build library
-$(RTOS_LIB): $(CORE_OBJS) | $(BUILD_DIR)
+$(MR_LIB): $(CORE_OBJS) | $(BUILD_DIR)
 	@echo "Creating library: $@"
 	@$(AR) rcs $@ $^
 
@@ -172,89 +172,89 @@ example0:
 	@echo "Example 0 built successfully!"
 
 # Example 1: Basic Tasks
-example1: $(RTOS_LIB)
+example1: $(MR_LIB)
 	@echo "Building example: 01_basic_tasks"
 	@$(CC) $(CFLAGS) examples/01_basic_tasks/main.c -o $(BUILD_DIR)/examples/example1.o
-	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example1.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example1.elf
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example1.o $(MR_LIB) -o $(BUILD_DIR)/examples/example1.elf
 	@$(SIZE) $(BUILD_DIR)/examples/example1.elf
 	@echo "Example 1 built successfully!"
 
 # Example 2: Mutex Demo
-example2: $(RTOS_LIB)
+example2: $(MR_LIB)
 	@echo "Building example: 02_mutex_demo"
 	@$(CC) $(CFLAGS) examples/02_mutex_demo/main.c -o $(BUILD_DIR)/examples/example2.o
-	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example2.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example2.elf
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example2.o $(MR_LIB) -o $(BUILD_DIR)/examples/example2.elf
 	@$(SIZE) $(BUILD_DIR)/examples/example2.elf
 	@echo "Example 2 built successfully!"
 
 # Example 3: Producer-Consumer
-example3: $(RTOS_LIB)
+example3: $(MR_LIB)
 	@echo "Building example: 03_producer_consumer"
 	@$(CC) $(CFLAGS) examples/03_producer_consumer/main.c -o $(BUILD_DIR)/examples/example3.o
-	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example3.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example3.elf
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example3.o $(MR_LIB) -o $(BUILD_DIR)/examples/example3.elf
 	@$(SIZE) $(BUILD_DIR)/examples/example3.elf
 	@echo "Example 3 built successfully!"
 
 # Example 4: Timer Events
-example4: $(RTOS_LIB)
+example4: $(MR_LIB)
 	@echo "Building example: 04_timer_events"
 	@$(CC) $(CFLAGS) examples/04_timer_events/main.c -o $(BUILD_DIR)/examples/example4.o
-	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example4.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example4.elf
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example4.o $(MR_LIB) -o $(BUILD_DIR)/examples/example4.elf
 	@$(SIZE) $(BUILD_DIR)/examples/example4.elf
 	@echo "Example 4 built successfully!"
 
 # Example 5: Tickless Low Power
-example5: $(RTOS_LIB)
+example5: $(MR_LIB)
 	@echo "Building example: 05_tickless_low_power"
 	@$(CC) $(CFLAGS) examples/05_tickless_low_power/main.c -o $(BUILD_DIR)/examples/example5.o
-	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example5.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example5.elf
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example5.o $(MR_LIB) -o $(BUILD_DIR)/examples/example5.elf
 	@$(SIZE) $(BUILD_DIR)/examples/example5.elf
 	@echo "Example 5 built successfully!"
 
 # Example 7: Async / Await
-example7: $(RTOS_LIB)
+example7: $(MR_LIB)
 	@echo "Building example: 07_async_await"
 	@$(CC) $(CFLAGS) examples/07_async_await/main.c -o $(BUILD_DIR)/examples/example7.o
-	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example7.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example7.elf
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example7.o $(MR_LIB) -o $(BUILD_DIR)/examples/example7.elf
 	@$(SIZE) $(BUILD_DIR)/examples/example7.elf
 	@echo "Example 7 built successfully!"
 
 # Example 9: Minimal RTOS busy-wait blink (no task_delay, no timer ticks)
-example9: $(RTOS_LIB)
+example9: $(MR_LIB)
 	@echo "Building example: 09_blink_busywait"
 	@$(CC) $(CFLAGS) examples/09_blink_busywait/main.c -o $(BUILD_DIR)/examples/example9.o
-	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example9.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example9.elf
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example9.o $(MR_LIB) -o $(BUILD_DIR)/examples/example9.elf
 	@$(SIZE) $(BUILD_DIR)/examples/example9.elf
 	@echo "Example 9 built successfully!"
 
-# Example 10: Single task using rtos_task_delay (tick wake-up test)
-example10: $(RTOS_LIB)
+# Example 10: Single task using mr_task_delay (tick wake-up test)
+example10: $(MR_LIB)
 	@echo "Building example: 10_blink_taskdelay"
 	@$(CC) $(CFLAGS) examples/10_blink_taskdelay/main.c -o $(BUILD_DIR)/examples/example10.o
-	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example10.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example10.elf
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example10.o $(MR_LIB) -o $(BUILD_DIR)/examples/example10.elf
 	@$(SIZE) $(BUILD_DIR)/examples/example10.elf
 	@echo "Example 10 built successfully!"
 
 # Example 11: Diagnostic blink with 100ms delay (counts iterations)
-example11: $(RTOS_LIB)
+example11: $(MR_LIB)
 	@echo "Building example: 11_diag_blink"
 	@$(CC) $(CFLAGS) examples/11_diag_blink/main.c -o $(BUILD_DIR)/examples/example11.o
-	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example11.o $(RTOS_LIB) -o $(BUILD_DIR)/examples/example11.elf
+	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example11.o $(MR_LIB) -o $(BUILD_DIR)/examples/example11.elf
 	@$(SIZE) $(BUILD_DIR)/examples/example11.elf
 	@echo "Example 11 built successfully!"
 
 # Example 8: EDF Deadline Scheduling
-# Built against a feature-enabled library — rtos_deadline.c needs
-# -DRTOS_USE_EDF_SCHEDULER=1 to produce real code instead of a stub.
-EDF_LIB = $(BUILD_DIR)/librtos_edf.a
-EDF_DEADLINE_OBJ = $(BUILD_DIR)/src/core/rtos_deadline.edf.o
-# All core objects EXCEPT the default (stub) rtos_deadline.o; we substitute
+# Built against a feature-enabled library — mr_deadline.c needs
+# -DMR_USE_EDF_SCHEDULER=1 to produce real code instead of a stub.
+EDF_LIB = $(BUILD_DIR)/libmicrortos_edf.a
+EDF_DEADLINE_OBJ = $(BUILD_DIR)/src/core/mr_deadline.edf.o
+# All core objects EXCEPT the default (stub) mr_deadline.o; we substitute
 # the EDF-enabled variant for it below.
-EDF_BASE_OBJS = $(filter-out $(BUILD_DIR)/src/core/rtos_deadline.o, $(CORE_OBJS))
+EDF_BASE_OBJS = $(filter-out $(BUILD_DIR)/src/core/mr_deadline.o, $(CORE_OBJS))
 
-$(EDF_DEADLINE_OBJ): src/core/rtos_deadline.c | $(BUILD_DIR)
+$(EDF_DEADLINE_OBJ): src/core/mr_deadline.c | $(BUILD_DIR)
 	@echo "Compiling (EDF on): $<"
-	@$(CC) $(CFLAGS) -DRTOS_USE_EDF_SCHEDULER=1 -c $< -o $@
+	@$(CC) $(CFLAGS) -DMR_USE_EDF_SCHEDULER=1 -c $< -o $@
 
 $(EDF_LIB): $(EDF_BASE_OBJS) $(EDF_DEADLINE_OBJ)
 	@echo "Creating EDF library: $@"
@@ -262,7 +262,7 @@ $(EDF_LIB): $(EDF_BASE_OBJS) $(EDF_DEADLINE_OBJ)
 
 example8: $(EDF_LIB)
 	@echo "Building example: 08_edf_deadline"
-	@$(CC) $(CFLAGS) -DRTOS_USE_EDF_SCHEDULER=1 examples/08_edf_deadline/main.c -o $(BUILD_DIR)/examples/example8.o
+	@$(CC) $(CFLAGS) -DMR_USE_EDF_SCHEDULER=1 examples/08_edf_deadline/main.c -o $(BUILD_DIR)/examples/example8.o
 	@$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/example8.o $(EDF_LIB) -o $(BUILD_DIR)/examples/example8.elf
 	@$(SIZE) $(BUILD_DIR)/examples/example8.elf
 	@echo "Example 8 built successfully!"
@@ -347,13 +347,13 @@ check: $(BUILD_DIR)
 # These flags are off by default, so the regular check above does not exercise them.
 check-features: $(BUILD_DIR)
 	@echo "Checking syntax with each advanced feature enabled..."
-	@for flag in RTOS_USE_EDF_SCHEDULER RTOS_USE_MPU RTOS_USE_SMP \
-	             RTOS_USE_WATCHDOG RTOS_USE_TASK_WATCHDOG \
-	             RTOS_USE_TRACING RTOS_USE_ZEROCOPY; do \
+	@for flag in MR_USE_EDF_SCHEDULER MR_USE_MPU MR_USE_SMP \
+	             MR_USE_WATCHDOG MR_USE_TASK_WATCHDOG \
+	             MR_USE_TRACING MR_USE_ZEROCOPY; do \
 		echo "  -- $$flag=1"; \
 		$(CC) $(CFLAGS) -D$$flag=1 -fsyntax-only \
-			src/core/rtos_deadline.c src/core/rtos_mpu.c src/core/rtos_smp.c \
-			src/diag/rtos_watchdog.c src/diag/rtos_trace.c src/ipc/rtos_zerocopy.c \
+			src/core/mr_deadline.c src/core/mr_mpu.c src/core/mr_smp.c \
+			src/diag/mr_watchdog.c src/diag/mr_trace.c src/ipc/mr_zerocopy.c \
 			|| exit 1; \
 	done
 	@echo "Feature syntax check passed!"
@@ -367,7 +367,7 @@ check-features: $(BUILD_DIR)
 ARM_GCC ?= arm-none-eabi-gcc
 ARM_CFLAGS = -c -std=gnu11 -mcpu=cortex-m3 -mthumb \
              -ffunction-sections -fdata-sections \
-             -DRTOS_PLATFORM_ARM=1 -DF_CPU=84000000UL \
+             -DMR_PLATFORM_ARM=1 -DF_CPU=84000000UL \
              -I./include
 
 check-arm:
@@ -376,8 +376,8 @@ check-arm:
 		echo "  Install with: apt install gcc-arm-none-eabi"; \
 	else \
 		echo "Checking ARM port syntax with $(ARM_GCC)..."; \
-		$(ARM_GCC) $(ARM_CFLAGS) -fsyntax-only src/port/arm/rtos_port_arm.c || exit 1; \
-		for src in $(filter-out src/port/avr/rtos_port_avr.c, $(CORE_SRCS)); do \
+		$(ARM_GCC) $(ARM_CFLAGS) -fsyntax-only src/port/arm/mr_port_arm.c || exit 1; \
+		for src in $(filter-out src/port/avr/mr_port_avr.c, $(CORE_SRCS)); do \
 			echo "  -- $$src"; \
 			$(ARM_GCC) $(ARM_CFLAGS) -fsyntax-only $$src || exit 1; \
 		done; \
@@ -391,13 +391,13 @@ check-arm-features:
 		echo "Skipping ARM feature check: $(ARM_GCC) not in PATH"; \
 	else \
 		echo "Checking ARM syntax with each advanced feature enabled..."; \
-		for flag in RTOS_USE_EDF_SCHEDULER RTOS_USE_MPU RTOS_USE_SMP \
-		             RTOS_USE_WATCHDOG RTOS_USE_TASK_WATCHDOG \
-		             RTOS_USE_TRACING RTOS_USE_ZEROCOPY; do \
+		for flag in MR_USE_EDF_SCHEDULER MR_USE_MPU MR_USE_SMP \
+		             MR_USE_WATCHDOG MR_USE_TASK_WATCHDOG \
+		             MR_USE_TRACING MR_USE_ZEROCOPY; do \
 			echo "  -- $$flag=1"; \
 			$(ARM_GCC) $(ARM_CFLAGS) -D$$flag=1 -fsyntax-only \
-				src/core/rtos_deadline.c src/core/rtos_mpu.c src/core/rtos_smp.c \
-				src/diag/rtos_watchdog.c src/diag/rtos_trace.c src/ipc/rtos_zerocopy.c \
+				src/core/mr_deadline.c src/core/mr_mpu.c src/core/mr_smp.c \
+				src/diag/mr_watchdog.c src/diag/mr_trace.c src/ipc/mr_zerocopy.c \
 				|| exit 1; \
 		done; \
 		echo "ARM feature syntax check passed!"; \
@@ -408,11 +408,11 @@ check-arm-features:
 #==============================================================================
 
 HOST_CC ?= gcc
-# RTOS_PLATFORM_HOST short-circuits the chip-specific includes in rtos_port.h
-# so host tests link against plain libc. Host stubs provide rtos_assert_failed
+# MR_PLATFORM_HOST short-circuits the chip-specific includes in mr_port.h
+# so host tests link against plain libc. Host stubs provide mr_assert_failed
 # and the kernel globals/port shims that the modules under test reference.
 HOST_CFLAGS = -std=gnu11 -O0 -g -Wall -Wextra -I./include \
-              -DRTOS_PLATFORM_HOST=1
+              -DMR_PLATFORM_HOST=1
 
 HOST_STUBS = tests/unit/host_stubs.c
 HOST_TEST_INC = -I tests/unit
@@ -421,15 +421,15 @@ test: $(BUILD_DIR)
 	@mkdir -p $(BUILD_DIR)/tests
 	@echo "Building host unit tests..."
 	@$(HOST_CC) $(HOST_CFLAGS) $(HOST_TEST_INC) \
-		tests/unit/test_list.c $(HOST_STUBS) src/core/rtos_list.c \
+		tests/unit/test_list.c $(HOST_STUBS) src/core/mr_list.c \
 		-o $(BUILD_DIR)/tests/test_list
 	@$(HOST_CC) $(HOST_CFLAGS) $(HOST_TEST_INC) \
 		tests/unit/test_mempool.c $(HOST_STUBS) \
-		src/core/rtos_list.c src/memory/rtos_mempool.c \
+		src/core/mr_list.c src/memory/mr_mempool.c \
 		-o $(BUILD_DIR)/tests/test_mempool
 	@$(HOST_CC) $(HOST_CFLAGS) $(HOST_TEST_INC) \
 		tests/unit/test_queue.c $(HOST_STUBS) \
-		src/core/rtos_list.c src/ipc/rtos_queue.c \
+		src/core/mr_list.c src/ipc/mr_queue.c \
 		-o $(BUILD_DIR)/tests/test_queue
 	@echo "Running host unit tests..."
 	@set -e; for t in $(BUILD_DIR)/tests/test_list $(BUILD_DIR)/tests/test_mempool $(BUILD_DIR)/tests/test_queue; do \
@@ -441,9 +441,9 @@ test: $(BUILD_DIR)
 #==============================================================================
 
 debug: CFLAGS = $(CFLAGS_DEBUG)
-debug: clean $(BUILD_DIR) $(RTOS_LIB)
+debug: clean $(BUILD_DIR) $(MR_LIB)
 	@echo "Debug build complete!"
-	@$(SIZE) $(RTOS_LIB) || true
+	@$(SIZE) $(MR_LIB) || true
 
 #==============================================================================
 # Strict Build (MISRA Compliance)
@@ -457,7 +457,7 @@ strict: clean $(BUILD_DIR)
 		$(CC) $(CFLAGS) $$src -o $(BUILD_DIR)/$${src%.c}.o 2>&1 | tee -a $(BUILD_DIR)/warnings.log; \
 	done
 	@echo "Creating library..."
-	@$(AR) rcs $(RTOS_LIB) $(CORE_OBJS)
+	@$(AR) rcs $(MR_LIB) $(CORE_OBJS)
 	@echo ""
 	@echo "=========================================="
 	@echo "MISRA Compliance Build Complete"
@@ -554,8 +554,8 @@ metrics: $(BUILD_DIR)
 	@grep -c -E "if|while|for|switch|case" $(CORE_SRCS) || true
 	@echo ""
 	@echo "=== Binary Size ==="
-	@if [ -f $(RTOS_LIB) ]; then \
-		$(SIZE) $(RTOS_LIB); \
+	@if [ -f $(MR_LIB) ]; then \
+		$(SIZE) $(MR_LIB); \
 	else \
 		echo "Build the library first with 'make'"; \
 	fi
@@ -584,13 +584,13 @@ safety-check: $(BUILD_DIR)
 	@echo "Checking safety-critical patterns..."
 	@echo ""
 	@echo "=== Stack Overflow Protection ==="
-	@grep -l "RTOS_CHECK_STACK_OVERFLOW" include/*.h src/**/*.c || echo "Not found"
+	@grep -l "MR_CHECK_STACK_OVERFLOW" include/*.h src/**/*.c || echo "Not found"
 	@echo ""
 	@echo "=== Assertion Coverage ==="
-	@grep -c "RTOS_ASSERT" $(CORE_SRCS) | awk -F: '{sum += $$2} END {print "Total assertions: " sum}'
+	@grep -c "MR_ASSERT" $(CORE_SRCS) | awk -F: '{sum += $$2} END {print "Total assertions: " sum}'
 	@echo ""
 	@echo "=== Critical Section Usage ==="
-	@grep -c "rtos_port_enter_critical\|rtos_port_exit_critical" $(CORE_SRCS) | awk -F: '{sum += $$2} END {print "Critical section calls: " sum}'
+	@grep -c "mr_port_enter_critical\|mr_port_exit_critical" $(CORE_SRCS) | awk -F: '{sum += $$2} END {print "Critical section calls: " sum}'
 	@echo ""
 	@echo "=== Volatile Qualifiers ==="
 	@grep -c "volatile" include/*.h $(CORE_SRCS) | awk -F: '{sum += $$2} END {print "Volatile usages: " sum}'

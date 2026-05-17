@@ -15,14 +15,14 @@ cd rtos
 make all
 ```
 
-`make all` produces `build/librtos.a` (~21 KB raw archive, but the linker
+`make all` produces `build/libmicrortos.a` (~21 KB raw archive, but the linker
 strips everything you don't use). You'll see something like:
 
 ```
 Build complete!
    text   data    bss   filename
-    929      0      0   rtos_list.o
-   2280      0      0   rtos_task.o
+    929      0      0   mr_list.o
+   2280      0      0   mr_task.o
    ...
 ```
 
@@ -30,7 +30,7 @@ Build complete!
 
 <TypeTable
   type={{
-    all: { type: 'target', description: 'Build librtos.a (default release config)' },
+    all: { type: 'target', description: 'Build libmicrortos.a (default release config)' },
     examples: { type: 'target', description: 'Build all 11 examples' },
     'example<N>': { type: 'target', description: 'Build one example (e.g. example10)' },
     flash: { type: 'target', description: 'make flash EXAMPLE=N — build + flash example N' },

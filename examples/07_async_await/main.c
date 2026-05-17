@@ -12,8 +12,8 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "rtos.h"
-#include "rtos_async.h"
+#include "micrortos.h"
+#include "mr_async.h"
 
 #ifdef __AVR__
 #include <avr/io.h>
@@ -41,7 +41,7 @@
  * Step 4: turn LED off for 400 ms
  * Then the function completes; the runner restarts it.
  */
-static rtos_async_status_t blink_pattern(rtos_async_state_t *state, void *arg)
+static mr_async_status_t blink_pattern(mr_async_state_t *state, void *arg)
 {
     (void)arg;
 
@@ -66,7 +66,7 @@ static rtos_async_status_t blink_pattern(rtos_async_state_t *state, void *arg)
 /* Task driving the async runner                                              */
 /*===========================================================================*/
 
-static rtos_tcb_t runner_tcb;
+static mr_tcb_t runner_tcb;
 static uint8_t runner_stack[192];
 
 static volatile uint32_t cycles_completed = 0;
@@ -75,19 +75,19 @@ static void runner_task(void *arg)
 {
     (void)arg;
 
-    rtos_async_state_t state;
-    rtos_async_init(&state);
+    mr_async_state_t state;
+    mr_async_init(&state);
 
     while (1) {
-        rtos_async_status_t s = blink_pattern(&state, NULL);
+        mr_async_status_t s = blink_pattern(&state, NULL);
 
-        if (s == RTOS_ASYNC_DONE) {
+        if (s == MR_ASYNC_DONE) {
             cycles_completed++;
-            rtos_async_reset(&state);
+            mr_async_reset(&state);
         }
 
         /* Step the state machine at 10 ms granularity. */
-        rtos_task_delay(RTOS_MS_TO_TICKS(10));
+        mr_task_delay(MR_MS_TO_TICKS(10));
     }
 }
 
@@ -110,9 +110,9 @@ static void hardware_init(void)
 int main(void)
 {
     hardware_init();
-    rtos_kernel_init();
+    mr_kernel_init();
 
-    rtos_task_create(&runner_tcb,
+    mr_task_create(&runner_tcb,
                      "AsyncRunner",
                      runner_task,
                      NULL,
@@ -120,6 +120,6 @@ int main(void)
                      runner_stack,
                      sizeof(runner_stack));
 
-    rtos_kernel_start();
+    mr_kernel_start();
     return 0;
 }

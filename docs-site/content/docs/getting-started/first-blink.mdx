@@ -4,10 +4,10 @@ description: A line-by-line walk through example 10.
 ---
 
 `examples/10_blink_taskdelay/main.c` is the minimum useful RTOS program:
-one task that toggles a pin, sleeps via `rtos_task_delay`, and repeats.
+one task that toggles a pin, sleeps via `mr_task_delay`, and repeats.
 
 ```c title="examples/10_blink_taskdelay/main.c"
-#include "rtos.h"
+#include "micrortos.h"
 
 #ifdef __AVR__
 #include <avr/io.h>
@@ -16,7 +16,7 @@ one task that toggles a pin, sleeps via `rtos_task_delay`, and repeats.
 #define LED_PORT    PORTB
 #endif
 
-static rtos_tcb_t t1;
+static mr_tcb_t t1;
 static uint8_t    t1_stack[128];
 
 static void blinker(void *arg)
@@ -24,7 +24,7 @@ static void blinker(void *arg)
     (void)arg;
     while (1) {
         LED_PORT ^= (1 << LED_PIN);
-        rtos_task_delay(RTOS_MS_TO_TICKS(500));
+        mr_task_delay(MR_MS_TO_TICKS(500));
     }
 }
 
@@ -33,10 +33,10 @@ int main(void)
     LED_DDR  |=  (1 << LED_PIN);
     LED_PORT &= ~(1 << LED_PIN);
 
-    rtos_kernel_init();
-    rtos_task_create(&t1, "blink", blinker, NULL, 2,
+    mr_kernel_init();
+    mr_task_create(&t1, "blink", blinker, NULL, 2,
                      t1_stack, sizeof(t1_stack));
-    rtos_kernel_start();
+    mr_kernel_start();
     return 0;
 }
 ```
@@ -46,7 +46,7 @@ int main(void)
 ### Task storage
 
 ```c
-static rtos_tcb_t t1;
+static mr_tcb_t t1;
 static uint8_t    t1_stack[128];
 ```
 
@@ -55,7 +55,7 @@ registers, priority, state, and list nodes. We allocate one statically.
 The 128-byte stack is also static — never `malloc`'d.
 
 <Callout type="info">
-Why 128 bytes? It's `RTOS_MINIMAL_STACK_SIZE` on AVR. It accounts for the
+Why 128 bytes? It's `MR_MINIMAL_STACK_SIZE` on AVR. It accounts for the
 33-byte register save plus interrupt frame plus typical call depth. You can
 go smaller for trivial tasks, but the assertion checker will yell at you.
 </Callout>
@@ -68,7 +68,7 @@ static void blinker(void *arg)
     (void)arg;
     while (1) {
         LED_PORT ^= (1 << LED_PIN);
-        rtos_task_delay(RTOS_MS_TO_TICKS(500));
+        mr_task_delay(MR_MS_TO_TICKS(500));
     }
 }
 ```
@@ -78,7 +78,7 @@ forever — returning from a task is undefined (don't do it). The body:
 
 1. **`LED_PORT ^= (1 << LED_PIN);`** Toggle pin 13. Plain AVR I/O — no
    abstraction layer.
-2. **`rtos_task_delay(RTOS_MS_TO_TICKS(500));`** Block this task for 500
+2. **`mr_task_delay(MR_MS_TO_TICKS(500));`** Block this task for 500
    ticks (500 ms at the default 1 kHz tick rate). The scheduler removes
    this TCB from the ready list, adds it to the delayed list with
    `wake_tick = current_tick + 500`, and switches to another ready
@@ -87,7 +87,7 @@ forever — returning from a task is undefined (don't do it). The body:
 ### Kernel setup
 
 ```c
-rtos_kernel_init();
+mr_kernel_init();
 ```
 
 Zeros the ready lists, the delayed list, and the priority bitmap. Creates
@@ -98,7 +98,7 @@ without it.
 ### Task creation
 
 ```c
-rtos_task_create(&t1, "blink", blinker, NULL, 2,
+mr_task_create(&t1, "blink", blinker, NULL, 2,
                  t1_stack, sizeof(t1_stack));
 ```
 
@@ -107,7 +107,7 @@ Five things happen here:
 1. `t1` is zeroed.
 2. The stack is filled with the canary pattern `0xA5` for overflow
    detection.
-3. `rtos_port_init_task_stack` lays down a fake interrupt frame so the
+3. `mr_port_init_task_stack` lays down a fake interrupt frame so the
    very first `reti` jumps cleanly to `blinker`.
 4. `t1` is inserted into `g_ready_list[2]` (priority 2 — lower numbers
    are higher priority).
@@ -116,17 +116,17 @@ Five things happen here:
 ### Starting the scheduler
 
 ```c
-rtos_kernel_start();
+mr_kernel_start();
 ```
 
 This call does not return. It:
 
-1. Calls `rtos_port_init()` which sets up Timer0 in CTC mode with
+1. Calls `mr_port_init()` which sets up Timer0 in CTC mode with
    `OCR0A = 249` (1 kHz tick at 16 MHz, prescaler 64) and enables the
    compare-match interrupt.
-2. Calls `rtos_scheduler_switch_context()` to pick the highest-priority
+2. Calls `mr_scheduler_switch_context()` to pick the highest-priority
    ready task — `t1`.
-3. Calls `rtos_port_start_scheduler()` which does `RESTORE_CONTEXT()`
+3. Calls `mr_port_start_scheduler()` which does `RESTORE_CONTEXT()`
    from `t1`'s stack and then `reti` — jumping to `blinker` with
    interrupts enabled.
 
@@ -145,7 +145,7 @@ This call does not return. It:
 Try changing the delay to 100 ms and re-flashing:
 
 ```c
-rtos_task_delay(RTOS_MS_TO_TICKS(100));
+mr_task_delay(MR_MS_TO_TICKS(100));
 ```
 
 ```bash

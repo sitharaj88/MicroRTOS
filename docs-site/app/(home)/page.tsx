@@ -17,25 +17,25 @@ import { CodeBlock } from '@/components/code-block';
 import { FeatureCard } from '@/components/feature-card';
 import { Stat } from '@/components/stat';
 
-const blinkExample = `#include "rtos.h"
+const blinkExample = `#include "micrortos.h"
 
-static rtos_tcb_t  task_tcb;
+static mr_tcb_t  task_tcb;
 static uint8_t     task_stack[128];
 
 static void blinker(void *arg) {
     (void)arg;
     while (1) {
         PORTB ^= (1 << PB5);                   /* toggle pin 13 */
-        rtos_task_delay(RTOS_MS_TO_TICKS(500));
+        mr_task_delay(MR_MS_TO_TICKS(500));
     }
 }
 
 int main(void) {
     DDRB |= (1 << PB5);
-    rtos_kernel_init();
-    rtos_task_create(&task_tcb, "blink", blinker, NULL, 2,
+    mr_kernel_init();
+    mr_task_create(&task_tcb, "blink", blinker, NULL, 2,
                      task_stack, sizeof(task_stack));
-    rtos_kernel_start();              /* never returns */
+    mr_kernel_start();              /* never returns */
 }`;
 
 export default function HomePage() {
@@ -183,7 +183,7 @@ make flash EXAMPLE=10`}</CodeBlock>
             <ul className="mt-6 space-y-2 text-sm text-fd-muted-foreground">
               <li className="flex items-start gap-2">
                 <ArrowRight className="mt-0.5 size-4 shrink-0 text-fd-primary" />
-                Single header for the public API (<span className="font-mono">rtos.h</span>)
+                Single header for the public API (<span className="font-mono">micrortos.h</span>)
               </li>
               <li className="flex items-start gap-2">
                 <ArrowRight className="mt-0.5 size-4 shrink-0 text-fd-primary" />

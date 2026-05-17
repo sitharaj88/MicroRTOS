@@ -3,12 +3,12 @@ title: Queue
 description: Fixed-size message queue with blocking send and receive.
 ---
 
-Enabled by `RTOS_USE_QUEUES=1` (default).
+Enabled by `MR_USE_QUEUES=1` (default).
 
-## `rtos_queue_init`
+## `mr_queue_init`
 
 ```c
-void rtos_queue_init(rtos_queue_t *queue,
+void mr_queue_init(mr_queue_t *queue,
                      void         *buffer,
                      uint16_t      item_size,
                      uint16_t      capacity);
@@ -20,42 +20,42 @@ void rtos_queue_init(rtos_queue_t *queue,
 | `item_size` | Size of each message in bytes |
 | `capacity` | Maximum number of pending messages |
 
-## `rtos_queue_send`
+## `mr_queue_send`
 
 ```c
-rtos_status_t rtos_queue_send(rtos_queue_t *queue,
+mr_status_t mr_queue_send(mr_queue_t *queue,
                                const void   *item,
                                uint32_t      timeout);
 ```
 
 Copies `item` into the queue tail. Blocks up to `timeout` if full.
-Returns `RTOS_OK`, `RTOS_ERR_TIMEOUT`, or `RTOS_ERR_FULL` (on
+Returns `MR_OK`, `MR_ERR_TIMEOUT`, or `MR_ERR_FULL` (on
 non-blocking).
 
-## `rtos_queue_send_front`
+## `mr_queue_send_front`
 
 ```c
-rtos_status_t rtos_queue_send_front(rtos_queue_t *queue,
+mr_status_t mr_queue_send_front(mr_queue_t *queue,
                                      const void   *item,
                                      uint32_t      timeout);
 ```
 
 Same as `send`, but inserts at the head — for priority/urgent messages.
 
-## `rtos_queue_send_from_isr`
+## `mr_queue_send_from_isr`
 
 ```c
-rtos_status_t rtos_queue_send_from_isr(rtos_queue_t *queue,
+mr_status_t mr_queue_send_from_isr(mr_queue_t *queue,
                                         const void   *item,
                                         bool         *yield_required);
 ```
 
 ISR-safe, non-blocking.
 
-## `rtos_queue_receive`
+## `mr_queue_receive`
 
 ```c
-rtos_status_t rtos_queue_receive(rtos_queue_t *queue,
+mr_status_t mr_queue_receive(mr_queue_t *queue,
                                   void         *item,
                                   uint32_t      timeout);
 ```
@@ -63,37 +63,37 @@ rtos_status_t rtos_queue_receive(rtos_queue_t *queue,
 Copies the head message into `item` and removes it. Blocks up to
 `timeout` if empty.
 
-## `rtos_queue_receive_from_isr`
+## `mr_queue_receive_from_isr`
 
 ```c
-rtos_status_t rtos_queue_receive_from_isr(rtos_queue_t *queue,
+mr_status_t mr_queue_receive_from_isr(mr_queue_t *queue,
                                            void         *item,
                                            bool         *yield_required);
 ```
 
-## `rtos_queue_peek`
+## `mr_queue_peek`
 
 ```c
-rtos_status_t rtos_queue_peek(rtos_queue_t *queue,
+mr_status_t mr_queue_peek(mr_queue_t *queue,
                                void         *item,
                                uint32_t      timeout);
 ```
 
 Reads the head without removing.
 
-## `rtos_queue_count`
+## `mr_queue_count`
 
 ```c
-uint16_t rtos_queue_count(rtos_queue_t *queue);
-uint16_t rtos_queue_spaces_available(rtos_queue_t *queue);
-bool     rtos_queue_is_empty(rtos_queue_t *queue);
-bool     rtos_queue_is_full(rtos_queue_t *queue);
+uint16_t mr_queue_count(mr_queue_t *queue);
+uint16_t mr_queue_spaces_available(mr_queue_t *queue);
+bool     mr_queue_is_empty(mr_queue_t *queue);
+bool     mr_queue_is_full(mr_queue_t *queue);
 ```
 
-## `rtos_queue_reset`
+## `mr_queue_reset`
 
 ```c
-void rtos_queue_reset(rtos_queue_t *queue);
+void mr_queue_reset(mr_queue_t *queue);
 ```
 
 Drops all pending messages. Doesn't touch waiters.
@@ -104,24 +104,24 @@ Drops all pending messages. Doesn't touch waiters.
 typedef struct { uint16_t code; uint32_t value; } event_t;
 
 static event_t       buffer[8];
-static rtos_queue_t  events;
+static mr_queue_t  events;
 
 void init(void) {
-    rtos_queue_init(&events, buffer, sizeof(event_t), 8);
+    mr_queue_init(&events, buffer, sizeof(event_t), 8);
 }
 
 void producer(void *arg) {
     while (1) {
-        event_t e = { .code = 1, .value = rtos_tick_get() };
-        rtos_queue_send(&events, &e, RTOS_WAIT_FOREVER);
-        rtos_task_delay(RTOS_MS_TO_TICKS(100));
+        event_t e = { .code = 1, .value = mr_tick_get() };
+        mr_queue_send(&events, &e, MR_WAIT_FOREVER);
+        mr_task_delay(MR_MS_TO_TICKS(100));
     }
 }
 
 void consumer(void *arg) {
     event_t got;
     while (1) {
-        if (rtos_queue_receive(&events, &got, RTOS_WAIT_FOREVER) == RTOS_OK) {
+        if (mr_queue_receive(&events, &got, MR_WAIT_FOREVER) == MR_OK) {
             process(&got);
         }
     }

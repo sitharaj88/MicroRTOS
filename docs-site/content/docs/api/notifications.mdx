@@ -3,26 +3,26 @@ title: Task notifications
 description: The lightest-weight task signaling primitive.
 ---
 
-Enabled by `RTOS_USE_TASK_NOTIFICATIONS=1` (default).
+Enabled by `MR_USE_TASK_NOTIFICATIONS=1` (default).
 
 A notification is a 32-bit value attached to a task's TCB. No separate
 allocation, no separate object — every task already has the slot. For
 ISR→task or task→task signaling that doesn't need queuing, this is the
 cheapest option.
 
-## `rtos_task_notify`
+## `mr_task_notify`
 
 ```c
-rtos_status_t rtos_task_notify(rtos_tcb_t *tcb);
+mr_status_t mr_task_notify(mr_tcb_t *tcb);
 ```
 
 Signals the task. If the task is waiting on a notification, it wakes.
 
-## `rtos_task_notify_value`
+## `mr_task_notify_value`
 
 ```c
-rtos_status_t rtos_task_notify_value(rtos_tcb_t *tcb, uint32_t value,
-                                      rtos_notify_action_t action);
+mr_status_t mr_task_notify_value(mr_tcb_t *tcb, uint32_t value,
+                                      mr_notify_action_t action);
 ```
 
 Same as `notify` but also delivers a value. `action` controls how the
@@ -30,23 +30,23 @@ value is combined:
 
 | `action` | Behavior |
 |---|---|
-| `RTOS_NOTIFY_SET` | Overwrite |
-| `RTOS_NOTIFY_OR` | Bitwise OR with current value |
-| `RTOS_NOTIFY_INCREMENT` | Add 1 (counter semantics) |
-| `RTOS_NOTIFY_SET_IF_NEW` | Set only if not already pending |
+| `MR_NOTIFY_SET` | Overwrite |
+| `MR_NOTIFY_OR` | Bitwise OR with current value |
+| `MR_NOTIFY_INCREMENT` | Add 1 (counter semantics) |
+| `MR_NOTIFY_SET_IF_NEW` | Set only if not already pending |
 
-## `rtos_task_wait_notification`
+## `mr_task_wait_notification`
 
 ```c
-uint32_t rtos_task_wait_notification(uint32_t timeout);
+uint32_t mr_task_wait_notification(uint32_t timeout);
 ```
 
 Blocks until notified. Returns the value (or `0` on timeout).
 
-## `rtos_task_notify_from_isr`
+## `mr_task_notify_from_isr`
 
 ```c
-rtos_status_t rtos_task_notify_from_isr(rtos_tcb_t *tcb,
+mr_status_t mr_task_notify_from_isr(mr_tcb_t *tcb,
                                          bool       *yield_required);
 ```
 
@@ -54,16 +54,16 @@ rtos_status_t rtos_task_notify_from_isr(rtos_tcb_t *tcb,
 
 - **Single-event ISR → task** — lighter than a semaphore.
 - **Counter** — ISR increments, task processes batches via
-  `RTOS_NOTIFY_INCREMENT`.
+  `MR_NOTIFY_INCREMENT`.
 - **Flag set** — multiple ISRs OR their flags into one notification.
 
 ```c
 /* ISR */
-rtos_task_notify_from_isr(&worker_tcb, &yield);
+mr_task_notify_from_isr(&worker_tcb, &yield);
 
 /* Task */
 while (1) {
-    rtos_task_wait_notification(RTOS_WAIT_FOREVER);
+    mr_task_wait_notification(MR_WAIT_FOREVER);
     drain_queue();
 }
 ```

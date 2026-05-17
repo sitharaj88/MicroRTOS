@@ -18,80 +18,80 @@ A queue stores a FIFO of fixed-size items in a caller-provided buffer.
 typedef struct { uint16_t code; uint32_t value; } event_t;
 
 static event_t       queue_buffer[8];
-static rtos_queue_t  events;
+static mr_queue_t  events;
 
-rtos_queue_init(&events, queue_buffer, sizeof(event_t), 8);
+mr_queue_init(&events, queue_buffer, sizeof(event_t), 8);
 
 /* Producer */
 event_t e = { .code = 42, .value = 100 };
-rtos_queue_send(&events, &e, RTOS_WAIT_FOREVER);
+mr_queue_send(&events, &e, MR_WAIT_FOREVER);
 
 /* Consumer */
 event_t got;
-if (rtos_queue_receive(&events, &got, RTOS_MS_TO_TICKS(50)) == RTOS_OK) {
+if (mr_queue_receive(&events, &got, MR_MS_TO_TICKS(50)) == MR_OK) {
     handle(&got);
 }
 ```
 
 The kernel copies the bytes into the queue buffer on send and out of it
 on receive. No pointer ownership issues — once you've returned from
-`rtos_queue_send`, the kernel has its own copy.
+`mr_queue_send`, the kernel has its own copy.
 
 ### Variants
 
 | Call | Behavior |
 |---|---|
-| `rtos_queue_send(q, item, timeout)` | Tail send, blocks if full |
-| `rtos_queue_send_front(q, item, timeout)` | Head send (highest-priority message) |
-| `rtos_queue_send_from_isr(q, item, &yield)` | ISR-safe, non-blocking |
-| `rtos_queue_receive(q, item, timeout)` | Head receive, blocks if empty |
-| `rtos_queue_receive_from_isr(q, item, &yield)` | ISR-safe, non-blocking |
-| `rtos_queue_peek(q, item, timeout)` | Look without removing |
+| `mr_queue_send(q, item, timeout)` | Tail send, blocks if full |
+| `mr_queue_send_front(q, item, timeout)` | Head send (highest-priority message) |
+| `mr_queue_send_from_isr(q, item, &yield)` | ISR-safe, non-blocking |
+| `mr_queue_receive(q, item, timeout)` | Head receive, blocks if empty |
+| `mr_queue_receive_from_isr(q, item, &yield)` | ISR-safe, non-blocking |
+| `mr_queue_peek(q, item, timeout)` | Look without removing |
 
 When `*yield` is set after an ISR variant, request a context switch
 before returning from the ISR — see your port's recipe for how.
 
 ## Zero-copy buffers
 
-Enable with `RTOS_USE_ZEROCOPY=1`. The pattern:
+Enable with `MR_USE_ZEROCOPY=1`. The pattern:
 
-1. Allocate a buffer from a pool: `rtos_zc_buffer_alloc()`.
+1. Allocate a buffer from a pool: `mr_zc_buffer_alloc()`.
 2. Fill it.
 3. Send the **pointer** through a zero-copy queue.
 4. Receiver takes ownership.
-5. Receiver eventually frees with `rtos_zc_buffer_unref()`.
+5. Receiver eventually frees with `mr_zc_buffer_unref()`.
 
 ```c
 /* Setup */
-static rtos_mempool_t   pool;
+static mr_mempool_t   pool;
 static uint8_t          pool_memory[16 * 64];
-rtos_zc_pool_init(&pool, /* buf size */ 32, /* count */ 16,
+mr_zc_pool_init(&pool, /* buf size */ 32, /* count */ 16,
                   pool_memory, sizeof(pool_memory));
 
-static rtos_zc_buffer_t *slots[8];
-static rtos_zc_queue_t   queue;
-rtos_zc_queue_init(&queue, slots, 8);
+static mr_zc_buffer_t *slots[8];
+static mr_zc_queue_t   queue;
+mr_zc_queue_init(&queue, slots, 8);
 
 /* Producer */
-rtos_zc_buffer_t *buf = rtos_zc_buffer_alloc(&pool, 32, RTOS_NO_WAIT);
+mr_zc_buffer_t *buf = mr_zc_buffer_alloc(&pool, 32, MR_NO_WAIT);
 if (buf) {
     memcpy(buf->data, payload, payload_len);
-    rtos_zc_buffer_set_length(buf, payload_len);
-    rtos_zc_queue_send(&queue, buf, RTOS_WAIT_FOREVER);
+    mr_zc_buffer_set_length(buf, payload_len);
+    mr_zc_queue_send(&queue, buf, MR_WAIT_FOREVER);
 }
 
 /* Consumer */
-rtos_zc_buffer_t *got = rtos_zc_queue_receive(&queue, RTOS_WAIT_FOREVER);
+mr_zc_buffer_t *got = mr_zc_queue_receive(&queue, MR_WAIT_FOREVER);
 if (got) {
     process(got->data, got->length);
-    rtos_zc_buffer_unref(got);
+    mr_zc_buffer_unref(got);
 }
 ```
 
 ### Reference counting
 
 If multiple consumers need to see the same buffer (e.g., one logs, one
-forwards), use `rtos_zc_buffer_ref()` before passing to the second
+forwards), use `mr_zc_buffer_ref()` before passing to the second
 consumer. Each `unref` decrements. The buffer returns to the pool when
 the count hits zero.
 
@@ -100,11 +100,11 @@ the count hits zero.
 For fragmented messages, link buffers into a chain:
 
 ```c
-rtos_zc_chain_t chain;
-rtos_zc_chain_init(&chain);
-rtos_zc_chain_append(&chain, header);
-rtos_zc_chain_append(&chain, body);
-rtos_zc_chain_append(&chain, footer);
+mr_zc_chain_t chain;
+mr_zc_chain_init(&chain);
+mr_zc_chain_append(&chain, header);
+mr_zc_chain_append(&chain, body);
+mr_zc_chain_append(&chain, footer);
 ```
 
 The chain knows its total length so the receiver can walk it without

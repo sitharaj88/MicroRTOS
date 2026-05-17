@@ -15,7 +15,7 @@
  * Short 100 ms delays so we can see many cycles quickly.
  */
 
-#include "rtos.h"
+#include "micrortos.h"
 
 #ifdef __AVR__
 #include <avr/io.h>
@@ -24,7 +24,7 @@
 #define LED_PORT    PORTB
 #endif
 
-static rtos_tcb_t t1;
+static mr_tcb_t t1;
 static uint8_t    t1_stack[256];
 
 static volatile uint16_t iter_count;
@@ -35,7 +35,7 @@ static void blinker(void *arg)
     while (1) {
         iter_count++;
         LED_PORT ^= (1 << LED_PIN);
-        rtos_task_delay(RTOS_MS_TO_TICKS(100));
+        mr_task_delay(MR_MS_TO_TICKS(100));
     }
 }
 
@@ -45,8 +45,8 @@ int main(void)
     LED_PORT &= ~(1 << LED_PIN);
     iter_count = 0;
 
-    rtos_kernel_init();
-    rtos_task_create(&t1, "blink", blinker, NULL, 2, t1_stack, sizeof(t1_stack));
-    rtos_kernel_start();
+    mr_kernel_init();
+    mr_task_create(&t1, "blink", blinker, NULL, 2, t1_stack, sizeof(t1_stack));
+    mr_kernel_start();
     return 0;
 }

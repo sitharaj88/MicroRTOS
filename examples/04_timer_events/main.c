@@ -16,7 +16,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "rtos.h"
+#include "micrortos.h"
 
 /*===========================================================================*/
 /* Event Bits                                                                 */
@@ -36,13 +36,13 @@
 /* Event Group and Timers                                                     */
 /*===========================================================================*/
 
-static rtos_event_t task_events;
+static mr_event_t task_events;
 
 /* Periodic timer to trigger workers */
-static rtos_timer_t trigger_timer;
+static mr_timer_t trigger_timer;
 
 /* One-shot timer for timeout */
-static rtos_timer_t timeout_timer;
+static mr_timer_t timeout_timer;
 
 /* Statistics */
 static volatile uint32_t cycles_completed = 0;
@@ -51,16 +51,16 @@ static volatile uint32_t cycles_completed = 0;
 /* Task Definitions                                                           */
 /*===========================================================================*/
 
-static rtos_tcb_t worker1_tcb;
+static mr_tcb_t worker1_tcb;
 static uint8_t worker1_stack[192];
 
-static rtos_tcb_t worker2_tcb;
+static mr_tcb_t worker2_tcb;
 static uint8_t worker2_stack[192];
 
-static rtos_tcb_t worker3_tcb;
+static mr_tcb_t worker3_tcb;
 static uint8_t worker3_stack[192];
 
-static rtos_tcb_t coordinator_tcb;
+static mr_tcb_t coordinator_tcb;
 static uint8_t coordinator_stack[256];
 
 /*===========================================================================*/
@@ -70,18 +70,18 @@ static uint8_t coordinator_stack[256];
 /**
  * Periodic timer callback - triggers all workers.
  */
-static void trigger_timer_callback(rtos_timer_t *timer)
+static void trigger_timer_callback(mr_timer_t *timer)
 {
     (void)timer;
 
     /* Set start events for all workers */
-    rtos_event_set(&task_events, EVENT_ALL_START);
+    mr_event_set(&task_events, EVENT_ALL_START);
 }
 
 /**
  * Timeout timer callback - called if workers take too long.
  */
-static void timeout_timer_callback(rtos_timer_t *timer)
+static void timeout_timer_callback(mr_timer_t *timer)
 {
     (void)timer;
 
@@ -105,20 +105,20 @@ static void worker_task(void *arg)
 
     while (1) {
         /* Wait for our start event */
-        events = rtos_event_wait(
+        events = mr_event_wait(
             &task_events,
             start_bit,
             false,          /* Wait for any (just our bit) */
             true,           /* Clear on exit */
-            RTOS_WAIT_FOREVER
+            MR_WAIT_FOREVER
         );
 
         if (events & start_bit) {
             /* Simulate work - duration varies by worker */
-            rtos_task_delay(RTOS_MS_TO_TICKS(50 * worker_id));
+            mr_task_delay(MR_MS_TO_TICKS(50 * worker_id));
 
             /* Signal completion */
-            rtos_event_set(&task_events, done_bit);
+            mr_event_set(&task_events, done_bit);
         }
     }
 }
@@ -133,16 +133,16 @@ static void coordinator_task(void *arg)
     uint32_t events;
 
     /* Start the periodic trigger timer (every 500ms) */
-    rtos_timer_start(&trigger_timer);
+    mr_timer_start(&trigger_timer);
 
     while (1) {
         /* Wait for all workers to complete */
-        events = rtos_event_wait(
+        events = mr_event_wait(
             &task_events,
             EVENT_ALL_DONE,
             true,           /* Wait for ALL bits */
             true,           /* Clear on exit */
-            RTOS_MS_TO_TICKS(1000)  /* 1 second timeout */
+            MR_MS_TO_TICKS(1000)  /* 1 second timeout */
         );
 
         if (events == 0) {
@@ -164,31 +164,31 @@ static void coordinator_task(void *arg)
 int main(void)
 {
     /* Initialize the RTOS kernel */
-    rtos_kernel_init();
+    mr_kernel_init();
 
     /* Initialize event group */
-    rtos_event_init(&task_events);
+    mr_event_init(&task_events);
 
     /* Initialize periodic trigger timer (500ms period) */
-    rtos_timer_init(
+    mr_timer_init(
         &trigger_timer,
         "Trigger",
-        RTOS_MS_TO_TICKS(500),
+        MR_MS_TO_TICKS(500),
         true,   /* auto-reload (periodic) */
         trigger_timer_callback
     );
 
     /* Initialize one-shot timeout timer (2 second timeout) */
-    rtos_timer_init(
+    mr_timer_init(
         &timeout_timer,
         "Timeout",
-        RTOS_MS_TO_TICKS(2000),
+        MR_MS_TO_TICKS(2000),
         false,  /* one-shot */
         timeout_timer_callback
     );
 
     /* Create worker tasks (all same priority) */
-    rtos_task_create(
+    mr_task_create(
         &worker1_tcb,
         "Worker1",
         worker_task,
@@ -198,7 +198,7 @@ int main(void)
         sizeof(worker1_stack)
     );
 
-    rtos_task_create(
+    mr_task_create(
         &worker2_tcb,
         "Worker2",
         worker_task,
@@ -208,7 +208,7 @@ int main(void)
         sizeof(worker2_stack)
     );
 
-    rtos_task_create(
+    mr_task_create(
         &worker3_tcb,
         "Worker3",
         worker_task,
@@ -219,7 +219,7 @@ int main(void)
     );
 
     /* Create coordinator (higher priority) */
-    rtos_task_create(
+    mr_task_create(
         &coordinator_tcb,
         "Coord",
         coordinator_task,
@@ -230,7 +230,7 @@ int main(void)
     );
 
     /* Start the scheduler */
-    rtos_kernel_start();
+    mr_kernel_start();
 
     return 0;
 }

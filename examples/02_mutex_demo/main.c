@@ -18,13 +18,13 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "rtos.h"
+#include "micrortos.h"
 
 /*===========================================================================*/
 /* Shared Resource                                                            */
 /*===========================================================================*/
 
-static rtos_mutex_t resource_mutex;
+static mr_mutex_t resource_mutex;
 static volatile uint32_t shared_resource = 0;
 
 /*===========================================================================*/
@@ -32,19 +32,19 @@ static volatile uint32_t shared_resource = 0;
 /*===========================================================================*/
 
 /* Low priority task */
-static rtos_tcb_t low_prio_tcb;
+static mr_tcb_t low_prio_tcb;
 static uint8_t low_prio_stack[192];
 
 /* Medium priority task */
-static rtos_tcb_t med_prio_tcb;
+static mr_tcb_t med_prio_tcb;
 static uint8_t med_prio_stack[192];
 
 /* High priority task */
-static rtos_tcb_t high_prio_tcb;
+static mr_tcb_t high_prio_tcb;
 static uint8_t high_prio_stack[192];
 
 /* Semaphore to sync task startup */
-static rtos_sem_t start_sem;
+static mr_sem_t start_sem;
 
 /*===========================================================================*/
 /* Low Priority Task                                                          */
@@ -56,10 +56,10 @@ static void low_priority_task(void *arg)
 
     while (1) {
         /* Acquire the mutex */
-        rtos_mutex_lock(&resource_mutex, RTOS_WAIT_FOREVER);
+        mr_mutex_lock(&resource_mutex, MR_WAIT_FOREVER);
 
         /* Signal that we have the mutex */
-        rtos_sem_give(&start_sem);
+        mr_sem_give(&start_sem);
 
         /* Simulate work while holding mutex */
         for (volatile int i = 0; i < 10000; i++) {
@@ -67,10 +67,10 @@ static void low_priority_task(void *arg)
         }
 
         /* Release the mutex */
-        rtos_mutex_unlock(&resource_mutex);
+        mr_mutex_unlock(&resource_mutex);
 
         /* Wait before next iteration */
-        rtos_task_delay(RTOS_MS_TO_TICKS(500));
+        mr_task_delay(MR_MS_TO_TICKS(500));
     }
 }
 
@@ -83,7 +83,7 @@ static void medium_priority_task(void *arg)
     (void)arg;
 
     /* Wait for low priority task to acquire mutex */
-    rtos_sem_take(&start_sem, RTOS_WAIT_FOREVER);
+    mr_sem_take(&start_sem, MR_WAIT_FOREVER);
 
     while (1) {
         /*
@@ -105,7 +105,7 @@ static void medium_priority_task(void *arg)
         }
 
         /* Yield to other tasks */
-        rtos_task_delay(RTOS_MS_TO_TICKS(100));
+        mr_task_delay(MR_MS_TO_TICKS(100));
     }
 }
 
@@ -118,29 +118,29 @@ static void high_priority_task(void *arg)
     (void)arg;
 
     /* Wait for low priority task to acquire mutex first */
-    rtos_sem_take(&start_sem, RTOS_WAIT_FOREVER);
+    mr_sem_take(&start_sem, MR_WAIT_FOREVER);
 
     /* Give the semaphore back for medium priority task */
-    rtos_sem_give(&start_sem);
+    mr_sem_give(&start_sem);
 
     /* Small delay to let medium priority task start */
-    rtos_task_delay(RTOS_MS_TO_TICKS(10));
+    mr_task_delay(MR_MS_TO_TICKS(10));
 
     while (1) {
         /*
          * Try to acquire the mutex.
          * This will trigger priority inheritance on the current holder.
          */
-        rtos_mutex_lock(&resource_mutex, RTOS_WAIT_FOREVER);
+        mr_mutex_lock(&resource_mutex, MR_WAIT_FOREVER);
 
         /* Access the shared resource */
         shared_resource += 100;
 
         /* Release immediately */
-        rtos_mutex_unlock(&resource_mutex);
+        mr_mutex_unlock(&resource_mutex);
 
         /* Wait before next iteration */
-        rtos_task_delay(RTOS_MS_TO_TICKS(200));
+        mr_task_delay(MR_MS_TO_TICKS(200));
     }
 }
 
@@ -151,16 +151,16 @@ static void high_priority_task(void *arg)
 int main(void)
 {
     /* Initialize the RTOS kernel */
-    rtos_kernel_init();
+    mr_kernel_init();
 
     /* Initialize the mutex */
-    rtos_mutex_init(&resource_mutex);
+    mr_mutex_init(&resource_mutex);
 
     /* Initialize synchronization semaphore */
-    rtos_sem_init(&start_sem, 0, 2);
+    mr_sem_init(&start_sem, 0, 2);
 
     /* Create low priority task (priority 4) */
-    rtos_task_create(
+    mr_task_create(
         &low_prio_tcb,
         "LowPrio",
         low_priority_task,
@@ -171,7 +171,7 @@ int main(void)
     );
 
     /* Create medium priority task (priority 3) */
-    rtos_task_create(
+    mr_task_create(
         &med_prio_tcb,
         "MedPrio",
         medium_priority_task,
@@ -182,7 +182,7 @@ int main(void)
     );
 
     /* Create high priority task (priority 2) */
-    rtos_task_create(
+    mr_task_create(
         &high_prio_tcb,
         "HighPrio",
         high_priority_task,
@@ -193,7 +193,7 @@ int main(void)
     );
 
     /* Start the scheduler */
-    rtos_kernel_start();
+    mr_kernel_start();
 
     return 0;
 }

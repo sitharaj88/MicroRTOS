@@ -3,16 +3,16 @@ title: Timer
 description: Software timers — one-shot and periodic.
 ---
 
-Enabled by `RTOS_USE_TIMERS=1` (default). The kernel creates a dedicated
+Enabled by `MR_USE_TIMERS=1` (default). The kernel creates a dedicated
 "timer task" that runs all callbacks; the tick ISR just maintains a
 sorted timer list.
 
-## `rtos_timer_init`
+## `mr_timer_init`
 
 ```c
-void rtos_timer_init(rtos_timer_t       *timer,
+void mr_timer_init(mr_timer_t       *timer,
                      const char         *name,
-                     rtos_timer_callback callback,
+                     mr_timer_callback callback,
                      uint32_t            period_ticks,
                      bool                auto_reload);
 ```
@@ -22,77 +22,77 @@ void rtos_timer_init(rtos_timer_t       *timer,
 The callback signature is:
 
 ```c
-void my_callback(rtos_timer_t *timer);
+void my_callback(mr_timer_t *timer);
 ```
 
 It runs in the timer task context — you can call any kernel API.
 
-## `rtos_timer_start` / `rtos_timer_stop`
+## `mr_timer_start` / `mr_timer_stop`
 
 ```c
-rtos_status_t rtos_timer_start(rtos_timer_t *timer);
-rtos_status_t rtos_timer_stop(rtos_timer_t *timer);
+mr_status_t mr_timer_start(mr_timer_t *timer);
+mr_status_t mr_timer_stop(mr_timer_t *timer);
 ```
 
 `start` arms the timer; `stop` cancels a pending expiration. Calling
 `start` on an already-running timer resets the countdown.
 
-## `rtos_timer_change_period`
+## `mr_timer_change_period`
 
 ```c
-rtos_status_t rtos_timer_change_period(rtos_timer_t *timer,
+mr_status_t mr_timer_change_period(mr_timer_t *timer,
                                         uint32_t      new_period_ticks);
 ```
 
 Adjusts the period. If running, the new period applies to the next
 expiration cycle.
 
-## `rtos_timer_reset`
+## `mr_timer_reset`
 
 ```c
-rtos_status_t rtos_timer_reset(rtos_timer_t *timer);
+mr_status_t mr_timer_reset(mr_timer_t *timer);
 ```
 
 Restart the countdown from now, keeping the existing period.
 
-## `rtos_timer_is_active`
+## `mr_timer_is_active`
 
 ```c
-bool rtos_timer_is_active(rtos_timer_t *timer);
+bool mr_timer_is_active(mr_timer_t *timer);
 ```
 
 ## Tunables
 
 ```c
-/* In rtos_config.h */
-#define RTOS_TIMER_TASK_PRIORITY    1
-#define RTOS_TIMER_TASK_STACK_SIZE  96
-#define RTOS_TIMER_QUEUE_LENGTH     8
+/* In mr_config.h */
+#define MR_TIMER_TASK_PRIORITY    1
+#define MR_TIMER_TASK_STACK_SIZE  96
+#define MR_TIMER_QUEUE_LENGTH     8
 ```
 
 ## Example: periodic blink
 
 ```c
-static rtos_timer_t blink;
+static mr_timer_t blink;
 
-static void on_tick(rtos_timer_t *t) {
+static void on_tick(mr_timer_t *t) {
     (void)t;
     PORTB ^= (1 << PB5);
 }
 
 void init(void) {
-    rtos_timer_init(&blink, "blink", on_tick,
-                    RTOS_MS_TO_TICKS(500), /* periodic */ true);
-    rtos_timer_start(&blink);
+    mr_timer_init(&blink, "blink", on_tick,
+                    MR_MS_TO_TICKS(500), /* periodic */ true);
+    mr_timer_start(&blink);
 }
 ```
 
 ## Example: one-shot debounce
 
 ```c
-static rtos_timer_t debounce;
+static mr_timer_t debounce;
 
-static void check_button(rtos_timer_t *t) {
+static void check_button(mr_timer_t *t) {
     (void)t;
     if (PINB & (1 << PB0)) {
         button_pressed();
@@ -100,8 +100,8 @@ static void check_button(rtos_timer_t *t) {
 }
 
 void on_button_edge(void) {
-    rtos_timer_init(&debounce, "deb", check_button,
-                    RTOS_MS_TO_TICKS(20), /* one-shot */ false);
-    rtos_timer_start(&debounce);
+    mr_timer_init(&debounce, "deb", check_button,
+                    MR_MS_TO_TICKS(20), /* one-shot */ false);
+    mr_timer_start(&debounce);
 }
 ```

@@ -17,7 +17,7 @@ make flash EXAMPLE=10
 Expected output:
 
 ```
-Compiling: src/core/rtos_list.c
+Compiling: src/core/mr_list.c
 ...
 Example 10 built successfully!
 Generating Intel HEX: build/examples/example10.hex
@@ -51,7 +51,7 @@ make flash EXAMPLE=10 PORT=/dev/ttyACM1   # if not /dev/ttyACM0
 | 7 | Async/await coroutine pattern |
 | 8 | EDF deadline scheduling |
 | 9 | RTOS busy-wait blink (no `task_delay`) |
-| 10 | Single task using `rtos_task_delay` |
+| 10 | Single task using `mr_task_delay` |
 | 11 | Faster blink for counting cycles |
 
 ## Common errors

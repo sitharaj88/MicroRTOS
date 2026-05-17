@@ -9,7 +9,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "rtos_list.h"
+#include "mr_list.h"
 #include "test_harness.h"
 
 #include <assert.h>
@@ -24,96 +24,96 @@ TEST_DEFINE_GLOBALS();
 
 static void test_init_is_empty(void)
 {
-    rtos_list_t list;
-    rtos_list_init(&list);
-    CHECK(rtos_list_is_empty(&list));
-    CHECK(rtos_list_count(&list) == 0);
-    CHECK(rtos_list_peek_head(&list) == NULL);
-    CHECK(rtos_list_peek_tail(&list) == NULL);
+    mr_list_t list;
+    mr_list_init(&list);
+    CHECK(mr_list_is_empty(&list));
+    CHECK(mr_list_count(&list) == 0);
+    CHECK(mr_list_peek_head(&list) == NULL);
+    CHECK(mr_list_peek_tail(&list) == NULL);
 }
 
 static void test_insert_end_and_remove_head(void)
 {
-    rtos_list_t list;
-    rtos_list_node_t a, b, c;
+    mr_list_t list;
+    mr_list_node_t a, b, c;
 
-    rtos_list_init(&list);
-    rtos_list_node_init(&a, NULL);
-    rtos_list_node_init(&b, NULL);
-    rtos_list_node_init(&c, NULL);
+    mr_list_init(&list);
+    mr_list_node_init(&a, NULL);
+    mr_list_node_init(&b, NULL);
+    mr_list_node_init(&c, NULL);
 
-    rtos_list_insert_end(&list, &a);
-    rtos_list_insert_end(&list, &b);
-    rtos_list_insert_end(&list, &c);
+    mr_list_insert_end(&list, &a);
+    mr_list_insert_end(&list, &b);
+    mr_list_insert_end(&list, &c);
 
-    CHECK(rtos_list_count(&list) == 3);
-    CHECK(rtos_list_peek_head(&list) == &a);
-    CHECK(rtos_list_peek_tail(&list) == &c);
+    CHECK(mr_list_count(&list) == 3);
+    CHECK(mr_list_peek_head(&list) == &a);
+    CHECK(mr_list_peek_tail(&list) == &c);
 
-    CHECK(rtos_list_remove_head(&list) == &a);
-    CHECK(rtos_list_remove_head(&list) == &b);
-    CHECK(rtos_list_remove_head(&list) == &c);
-    CHECK(rtos_list_remove_head(&list) == NULL);
-    CHECK(rtos_list_is_empty(&list));
+    CHECK(mr_list_remove_head(&list) == &a);
+    CHECK(mr_list_remove_head(&list) == &b);
+    CHECK(mr_list_remove_head(&list) == &c);
+    CHECK(mr_list_remove_head(&list) == NULL);
+    CHECK(mr_list_is_empty(&list));
 }
 
 static void test_insert_sorted_ascending(void)
 {
-    rtos_list_t list;
-    rtos_list_node_t n1, n2, n3, n4;
+    mr_list_t list;
+    mr_list_node_t n1, n2, n3, n4;
 
-    rtos_list_init(&list);
-    rtos_list_node_init(&n1, NULL); n1.value = 30;
-    rtos_list_node_init(&n2, NULL); n2.value = 10;
-    rtos_list_node_init(&n3, NULL); n3.value = 20;
-    rtos_list_node_init(&n4, NULL); n4.value = 20;     /* dup */
+    mr_list_init(&list);
+    mr_list_node_init(&n1, NULL); n1.value = 30;
+    mr_list_node_init(&n2, NULL); n2.value = 10;
+    mr_list_node_init(&n3, NULL); n3.value = 20;
+    mr_list_node_init(&n4, NULL); n4.value = 20;     /* dup */
 
-    rtos_list_insert_sorted(&list, &n1);
-    rtos_list_insert_sorted(&list, &n2);
-    rtos_list_insert_sorted(&list, &n3);
-    rtos_list_insert_sorted(&list, &n4);
+    mr_list_insert_sorted(&list, &n1);
+    mr_list_insert_sorted(&list, &n2);
+    mr_list_insert_sorted(&list, &n3);
+    mr_list_insert_sorted(&list, &n4);
 
     /* Expected order: 10, 20, 20-dup, 30 */
-    rtos_list_node_t *p = rtos_list_remove_head(&list);
+    mr_list_node_t *p = mr_list_remove_head(&list);
     CHECK(p == &n2);
-    p = rtos_list_remove_head(&list);
+    p = mr_list_remove_head(&list);
     CHECK(p->value == 20);
-    p = rtos_list_remove_head(&list);
+    p = mr_list_remove_head(&list);
     CHECK(p->value == 20);
-    p = rtos_list_remove_head(&list);
+    p = mr_list_remove_head(&list);
     CHECK(p == &n1);
-    CHECK(rtos_list_is_empty(&list));
+    CHECK(mr_list_is_empty(&list));
 }
 
 static void test_remove_arbitrary(void)
 {
-    rtos_list_t list;
-    rtos_list_node_t a, b, c;
+    mr_list_t list;
+    mr_list_node_t a, b, c;
 
-    rtos_list_init(&list);
-    rtos_list_node_init(&a, NULL);
-    rtos_list_node_init(&b, NULL);
-    rtos_list_node_init(&c, NULL);
+    mr_list_init(&list);
+    mr_list_node_init(&a, NULL);
+    mr_list_node_init(&b, NULL);
+    mr_list_node_init(&c, NULL);
 
-    rtos_list_insert_end(&list, &a);
-    rtos_list_insert_end(&list, &b);
-    rtos_list_insert_end(&list, &c);
+    mr_list_insert_end(&list, &a);
+    mr_list_insert_end(&list, &b);
+    mr_list_insert_end(&list, &c);
 
     /* Remove from middle */
-    rtos_list_remove(&list, &b);
-    CHECK(rtos_list_count(&list) == 2);
-    CHECK(!rtos_list_node_is_linked(&b));
-    CHECK(rtos_list_peek_head(&list) == &a);
-    CHECK(rtos_list_peek_tail(&list) == &c);
+    mr_list_remove(&list, &b);
+    CHECK(mr_list_count(&list) == 2);
+    CHECK(!mr_list_node_is_linked(&b));
+    CHECK(mr_list_peek_head(&list) == &a);
+    CHECK(mr_list_peek_tail(&list) == &c);
 
     /* Remove tail */
-    rtos_list_remove(&list, &c);
-    CHECK(rtos_list_count(&list) == 1);
-    CHECK(rtos_list_peek_tail(&list) == &a);
+    mr_list_remove(&list, &c);
+    CHECK(mr_list_count(&list) == 1);
+    CHECK(mr_list_peek_tail(&list) == &a);
 
     /* Remove head */
-    rtos_list_remove(&list, &a);
-    CHECK(rtos_list_is_empty(&list));
+    mr_list_remove(&list, &a);
+    CHECK(mr_list_is_empty(&list));
 }
 
 /*===========================================================================*/

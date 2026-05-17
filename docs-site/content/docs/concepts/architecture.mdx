@@ -11,7 +11,7 @@ dispatch unless you turn on SMP.
 ```
 ┌────────────────────────────────────────────────────────────┐
 │                      Your application                       │
-│                       #include "rtos.h"                     │
+│                       #include "micrortos.h"                     │
 ├────────────────────────────────────────────────────────────┤
 │  Kernel (portable)                                          │
 │  ├─ Tasks, Scheduler, Idle              src/core/           │
@@ -31,23 +31,23 @@ dispatch unless you turn on SMP.
 
 ## The port interface
 
-Each port implements ~12 functions defined in `include/rtos_port.h`:
+Each port implements ~12 functions defined in `include/mr_port.h`:
 
 ```c
-void     rtos_port_init(void);
-void     rtos_port_start_scheduler(void);   // never returns
-void     rtos_port_yield(void);
-void     rtos_port_init_task_stack(rtos_tcb_t *tcb,
+void     mr_port_init(void);
+void     mr_port_start_scheduler(void);   // never returns
+void     mr_port_yield(void);
+void     mr_port_init_task_stack(mr_tcb_t *tcb,
                                     void (*entry)(void *),
                                     void *arg);
 
-void     rtos_port_enter_critical(void);
-void     rtos_port_exit_critical(void);
-uint32_t rtos_port_disable_interrupts(void);
-void     rtos_port_restore_interrupts(uint32_t state);
-bool     rtos_port_is_in_isr(void);
+void     mr_port_enter_critical(void);
+void     mr_port_exit_critical(void);
+uint32_t mr_port_disable_interrupts(void);
+void     mr_port_restore_interrupts(uint32_t state);
+bool     mr_port_is_in_isr(void);
 
-void     rtos_port_check_stack_overflow(void);
+void     mr_port_check_stack_overflow(void);
 ```
 
 A new port is about 500 lines of mostly mechanical glue. See
@@ -55,18 +55,18 @@ A new port is about 500 lines of mostly mechanical glue. See
 
 ## Configuration
 
-Everything is compile-time. `include/rtos_config.h` has every knob:
+Everything is compile-time. `include/mr_config.h` has every knob:
 
 ```c
-#define RTOS_TICK_RATE_HZ           1000
-#define RTOS_MAX_PRIORITIES         8
-#define RTOS_USE_TIMESLICING        1
-#define RTOS_USE_PREEMPTION         1
-#define RTOS_USE_MUTEXES            1
+#define MR_TICK_RATE_HZ           1000
+#define MR_MAX_PRIORITIES         8
+#define MR_USE_TIMESLICING        1
+#define MR_USE_PREEMPTION         1
+#define MR_USE_MUTEXES            1
 // ...
 ```
 
-Advanced features are gated by `RTOS_USE_*` flags. **A disabled feature
+Advanced features are gated by `MR_USE_*` flags. **A disabled feature
 costs zero bytes** — the linker strips the unreferenced code.
 
 | Default | Enabled |
@@ -77,35 +77,35 @@ costs zero bytes** — the linker strips the unreferenced code.
 ## Module dependency graph
 
 ```
-rtos.h
- └─ rtos_task.h ─── rtos_scheduler.h ─── rtos_list.h
+micrortos.h
+ └─ mr_task.h ─── mr_scheduler.h ─── mr_list.h
                          │                  │
-                         ├─ rtos_kernel.h ──┤
+                         ├─ mr_kernel.h ──┤
                          │                  │
-                         ├─ rtos_mutex.h    │
-                         ├─ rtos_sem.h      │
-                         ├─ rtos_event.h    │
-                         ├─ rtos_queue.h    │
-                         ├─ rtos_timer.h    │
-                         └─ rtos_mempool.h  │
+                         ├─ mr_mutex.h    │
+                         ├─ mr_sem.h      │
+                         ├─ mr_event.h    │
+                         ├─ mr_queue.h    │
+                         ├─ mr_timer.h    │
+                         └─ mr_mempool.h  │
                                             │
-                       rtos_port.h ─────────┘
+                       mr_port.h ─────────┘
                                             │
-                       rtos_types.h ────────┘
+                       mr_types.h ────────┘
 ```
 
-Everything resolves through `rtos.h`. You include one header.
+Everything resolves through `micrortos.h`. You include one header.
 
 ## Global state
 
 The kernel holds a small amount of mutable global state, all in
-`src/core/rtos_kernel.c`:
+`src/core/mr_kernel.c`:
 
 | Symbol | Type | Purpose |
 |---|---|---|
-| `g_current_tcb` | `rtos_tcb_t *` | Currently running task |
-| `g_ready_list[N]` | `rtos_list_t[]` | One ready queue per priority |
-| `g_delayed_list` | `rtos_list_t` | Tasks waiting on `task_delay` |
+| `g_current_tcb` | `mr_tcb_t *` | Currently running task |
+| `g_ready_list[N]` | `mr_list_t[]` | One ready queue per priority |
+| `g_delayed_list` | `mr_list_t` | Tasks waiting on `task_delay` |
 | `g_tick_count` | `volatile uint32_t` | Free-running tick counter |
 | `g_kernel_state` | `volatile enum` | `RUNNING` / `NOT_STARTED` / `SUSPENDED` |
 | `g_ready_priorities` | `uint32_t` | Bitmap — which priorities have ready tasks |
@@ -117,7 +117,7 @@ highest-priority ready task in one instruction on ARM, three on AVR.
 
 | File | Size (AVR release) | Notes |
 |---|---|---|
-| `build/librtos.a` | ~21 KB raw | Archive — linker only pulls what you use |
+| `build/libmicrortos.a` | ~21 KB raw | Archive — linker only pulls what you use |
 | `build/examples/example10.elf` | 3.5 KB text | Minimal RTOS app |
 | `build/examples/example4.elf` | 5.4 KB text | Largest example (timer + event + 4 tasks) |
 

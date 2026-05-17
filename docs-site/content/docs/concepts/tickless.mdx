@@ -17,30 +17,30 @@ wakes it.
 ## Enable it
 
 ```c
-/* In rtos_config.h or your build */
-#define RTOS_USE_TICKLESS_IDLE  1
-#define RTOS_TICKLESS_MIN_TICKS 2     /* don't go tickless for <2 ticks */
+/* In mr_config.h or your build */
+#define MR_USE_TICKLESS_IDLE  1
+#define MR_TICKLESS_MIN_TICKS 2     /* don't go tickless for <2 ticks */
 ```
 
 Then initialize and enable in `main`:
 
 ```c
-rtos_kernel_init();
+mr_kernel_init();
 /* create tasks */
-rtos_tickless_init();
-rtos_tickless_enable(true);
-rtos_tickless_set_sleep_mode(RTOS_SLEEP_IDLE);   /* or POWER_DOWN */
-rtos_kernel_start();
+mr_tickless_init();
+mr_tickless_enable(true);
+mr_tickless_set_sleep_mode(MR_SLEEP_IDLE);   /* or POWER_DOWN */
+mr_kernel_start();
 ```
 
 ## Sleep modes (AVR)
 
 | Mode | Wake sources | Power saving |
 |---|---|---|
-| `RTOS_SLEEP_IDLE` | Any interrupt (incl. timers) | Modest — CPU only stops |
-| `RTOS_SLEEP_ADC` | Most interrupts | A bit more |
-| `RTOS_SLEEP_STANDBY` | External pins, watchdog | Significant |
-| `RTOS_SLEEP_POWER_DOWN` | External pins, WD only | Maximum |
+| `MR_SLEEP_IDLE` | Any interrupt (incl. timers) | Modest — CPU only stops |
+| `MR_SLEEP_ADC` | Most interrupts | A bit more |
+| `MR_SLEEP_STANDBY` | External pins, watchdog | Significant |
+| `MR_SLEEP_POWER_DOWN` | External pins, WD only | Maximum |
 
 Deeper modes save more power but take longer to wake. Pick based on
 your latency budget.
@@ -50,12 +50,12 @@ your latency budget.
 If you have hardware to put to sleep (sensors, radios), implement:
 
 ```c
-#define RTOS_USE_TICKLESS_HOOKS 1
+#define MR_USE_TICKLESS_HOOKS 1
 
-void rtos_tickless_pre_sleep_hook(uint32_t expected_ticks) {
+void mr_tickless_pre_sleep_hook(uint32_t expected_ticks) {
     /* Power down peripherals you don't need */
 }
-void rtos_tickless_post_sleep_hook(uint32_t slept_ticks) {
+void mr_tickless_post_sleep_hook(uint32_t slept_ticks) {
     /* Power them back up */
 }
 ```
@@ -65,8 +65,8 @@ The kernel calls these around every sleep cycle.
 ## Statistics
 
 ```c
-uint32_t cycles = rtos_tickless_get_sleep_count();
-uint32_t ticks  = rtos_tickless_get_total_slept();
+uint32_t cycles = mr_tickless_get_sleep_count();
+uint32_t ticks  = mr_tickless_get_total_slept();
 ```
 
 Use these to verify you're actually sleeping. A noisy system (lots of

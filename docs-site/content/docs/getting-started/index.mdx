@@ -5,7 +5,7 @@ icon: Rocket
 ---
 
 This is the fast path. By the end you'll have an Arduino Uno running a real
-RTOS task that toggles the on-board LED via `rtos_task_delay()`.
+RTOS task that toggles the on-board LED via `mr_task_delay()`.
 
 <Steps>
   <Step>
@@ -22,7 +22,7 @@ RTOS task that toggles the on-board LED via `rtos_task_delay()`.
     cd rtos
     make all
     ```
-    This produces `build/librtos.a` (~21 KB). See [Build](/docs/getting-started/build).
+    This produces `build/libmicrortos.a` (~21 KB). See [Build](/docs/getting-started/build).
   </Step>
   <Step>
     **Flash a board.** Plug in an Uno and run:
@@ -44,7 +44,7 @@ RTOS task that toggles the on-board LED via `rtos_task_delay()`.
 By the end of Get Started you'll understand:
 
 - How to create a task with a static TCB and stack
-- How `rtos_task_delay` interacts with the scheduler
+- How `mr_task_delay` interacts with the scheduler
 - How the Makefile organizes builds, examples, and flashing
 - Where to go next for advanced features
 

@@ -31,10 +31,10 @@ when it's free, and is overwritten by user data when it's allocated.
 #define BLOCK_COUNT  16
 
 static uint8_t        pool_memory[BLOCK_SIZE * BLOCK_COUNT];
-static rtos_mempool_t pool;
+static mr_mempool_t pool;
 
 void init(void) {
-    rtos_mempool_init(&pool, pool_memory, BLOCK_SIZE, BLOCK_COUNT);
+    mr_mempool_init(&pool, pool_memory, BLOCK_SIZE, BLOCK_COUNT);
 }
 ```
 
@@ -44,20 +44,20 @@ The kernel will round up if smaller.
 ## Allocating and freeing
 
 ```c
-void *block = rtos_mempool_alloc(&pool, RTOS_WAIT_FOREVER);
+void *block = mr_mempool_alloc(&pool, MR_WAIT_FOREVER);
 /* Use the block */
-rtos_mempool_free(&pool, block);
+mr_mempool_free(&pool, block);
 ```
 
-If the pool is exhausted, `rtos_mempool_alloc` blocks until another task
-frees a block (or the timeout expires). Pass `RTOS_NO_WAIT` for
+If the pool is exhausted, `mr_mempool_alloc` blocks until another task
+frees a block (or the timeout expires). Pass `MR_NO_WAIT` for
 non-blocking allocation that returns `NULL` immediately when empty.
 
 ### ISR-safe variants
 
 ```c
-void *b = rtos_mempool_alloc_from_isr(&pool);
-rtos_mempool_free_from_isr(&pool, b, &yield_required);
+void *b = mr_mempool_alloc_from_isr(&pool);
+mr_mempool_free_from_isr(&pool, b, &yield_required);
 ```
 
 These never block. ISR alloc returns `NULL` if the pool is empty.
@@ -65,9 +65,9 @@ These never block. ISR alloc returns `NULL` if the pool is empty.
 ## Querying
 
 ```c
-uint16_t free  = rtos_mempool_available(&pool);
-uint16_t total = rtos_mempool_total(&pool);
-bool empty     = rtos_mempool_is_empty(&pool);
+uint16_t free  = mr_mempool_available(&pool);
+uint16_t total = mr_mempool_total(&pool);
+bool empty     = mr_mempool_is_empty(&pool);
 ```
 
 Use these to plan back-pressure logic.
@@ -81,7 +81,7 @@ plus 2 in-flight in DMA, allocate 10 blocks.
 A 16-block pool of 32-byte blocks costs:
 
 - 512 B for the data
-- 32 B for the `rtos_mempool_t` struct
+- 32 B for the `mr_mempool_t` struct
 - 0 B of free-list metadata (lives inside free blocks)
 
 That's it. Compare to `malloc`'s typical 16-byte header per allocation

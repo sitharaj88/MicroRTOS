@@ -78,13 +78,13 @@ MicroRTOS is designed for **safety-critical embedded systems** and targets compl
 
 **Deviation**: Necessary for memory-mapped hardware register access in port layer.
 
-**Location**: `src/port/arm/rtos_port_arm.c`, `src/port/avr/rtos_port_avr.c`
+**Location**: `src/port/arm/mr_port_arm.c`, `src/port/avr/mr_port_avr.c`
 
 **Justification**: Embedded systems require direct memory-mapped register access. The ARM CMSIS standard and AVR conventions mandate this pattern for hardware control.
 
 **Risk Mitigation**:
 - Restricted to port layer only
-- Uses type-safe `RTOS_VOLATILE_U32()` macro
+- Uses type-safe `MR_VOLATILE_U32()` macro
 - Hardware addresses verified against datasheets
 - Isolated in platform-specific files
 
@@ -96,12 +96,12 @@ MicroRTOS is designed for **safety-critical embedded systems** and targets compl
 
 **Deviation**: Required for generic container data structures.
 
-**Location**: `src/core/rtos_list.c` - container pointer handling
+**Location**: `src/core/mr_list.c` - container pointer handling
 
 **Justification**: The intrusive list design pattern requires storing opaque container pointers. This is a well-established pattern used in Linux kernel and other production RTOSes.
 
 **Risk Mitigation**:
-- Encapsulated in `RTOS_CONTAINER_OF` macro
+- Encapsulated in `MR_CONTAINER_OF` macro
 - Type safety enforced at call sites
 - Static analysis verifies correct usage
 
@@ -113,7 +113,7 @@ MicroRTOS is designed for **safety-critical embedded systems** and targets compl
 
 **Deviation**: `while(1)` patterns used in scheduler loop and fault handlers.
 
-**Location**: `src/core/rtos_kernel.c`, `src/core/rtos_scheduler.c`
+**Location**: `src/core/mr_kernel.c`, `src/core/mr_scheduler.c`
 
 **Justification**: RTOS kernel requires infinite loops for:
 1. Main scheduler loop (never returns by design)
@@ -122,7 +122,7 @@ MicroRTOS is designed for **safety-critical embedded systems** and targets compl
 
 **Risk Mitigation**:
 - All infinite loops are intentional and documented
-- Marked with `RTOS_NORETURN` attribute
+- Marked with `MR_NORETURN` attribute
 - Exit paths provided where applicable
 
 ---
@@ -133,9 +133,9 @@ MicroRTOS is designed for **safety-critical embedded systems** and targets compl
 
 **Deviation**: Used in convenience macros for stringification.
 
-**Location**: `include/rtos_misra.h`, `include/rtos.h`
+**Location**: `include/mr_misra.h`, `include/micrortos.h`
 
-**Justification**: Macros like `RTOS_TASK_DEFINE` use token pasting for ergonomic API. This is standard C practice for creating unique identifiers.
+**Justification**: Macros like `MR_TASK_DEFINE` use token pasting for ergonomic API. This is standard C practice for creating unique identifiers.
 
 **Risk Mitigation**:
 - Macros are thoroughly tested
@@ -207,13 +207,13 @@ MicroRTOS exclusively uses fixed-width integer types from `<stdint.h>`:
 
 ```c
 /* Explicit width casting (MISRA Rule 10.3) */
-#define RTOS_CAST_U8(x)  ((uint8_t)((x) & 0xFFU))
-#define RTOS_CAST_U16(x) ((uint16_t)((x) & 0xFFFFU))
-#define RTOS_CAST_U32(x) ((uint32_t)(x))
+#define MR_CAST_U8(x)  ((uint8_t)((x) & 0xFFU))
+#define MR_CAST_U16(x) ((uint16_t)((x) & 0xFFFFU))
+#define MR_CAST_U32(x) ((uint32_t)(x))
 
 /* Overflow-safe arithmetic (MISRA Rule 12.1) */
-#define RTOS_ADD_SAFE_U32(a, b, result) ...
-#define RTOS_SUB_SAFE_U32(a, b, result) ...
+#define MR_ADD_SAFE_U32(a, b, result) ...
+#define MR_SUB_SAFE_U32(a, b, result) ...
 ```
 
 ---
@@ -240,10 +240,10 @@ MicroRTOS uses **exclusively static memory allocation**:
 ### 5.3 Memory Guards
 
 ```c
-typedef struct rtos_mem_guard {
+typedef struct mr_mem_guard {
     uint32_t guard_start;     /* 0xDEADBEEF */
     uint32_t guard_start_inv; /* ~0xDEADBEEF */
-} rtos_mem_guard_t;
+} mr_mem_guard_t;
 ```
 
 ---
@@ -254,8 +254,8 @@ typedef struct rtos_mem_guard {
 
 ```c
 /* Nested critical section support */
-void rtos_critical_enter(void);  /* Increment nesting */
-void rtos_critical_exit(void);   /* Decrement nesting */
+void mr_critical_enter(void);  /* Increment nesting */
+void mr_critical_exit(void);   /* Decrement nesting */
 ```
 
 ### 6.2 Data Race Prevention
@@ -273,7 +273,7 @@ All shared variables properly qualified:
 
 ```c
 extern volatile uint32_t g_tick_count;
-extern volatile rtos_kernel_state_t g_kernel_state;
+extern volatile mr_kernel_state_t g_kernel_state;
 extern volatile uint8_t g_scheduler_suspended;
 extern volatile bool g_yield_pending;
 ```

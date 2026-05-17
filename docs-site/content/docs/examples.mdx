@@ -53,7 +53,7 @@ medium-priority tasks from starving the high-priority one.
 **Path:** `examples/03_producer_consumer/main.c` · **Flash:** `~6.4 KB`
 
 A producer task pushes events into a queue at one rate; a consumer
-drains them at another. Demonstrates `rtos_queue_send` / `_receive` and
+drains them at another. Demonstrates `mr_queue_send` / `_receive` and
 back-pressure when the queue fills.
 
 ## 04 · Timer + event group
@@ -62,7 +62,7 @@ back-pressure when the queue fills.
 **SRAM:** `~1.3 KB`
 
 Three tasks coordinate via an event group, driven by both periodic and
-one-shot software timers. Shows `rtos_event_wait` with `wait_all` /
+one-shot software timers. Shows `mr_event_wait` with `wait_all` /
 `wait_any` and how timers interact with event groups.
 
 ## 05 · Tickless low power
@@ -73,7 +73,7 @@ A sensor task wakes every 5 seconds. Between wakes, the kernel enters
 `POWER_DOWN` sleep mode with the tick suppressed. Demonstrates the
 40× current-draw improvement vs constant ticking.
 
-Requires `RTOS_USE_TICKLESS_IDLE=1`.
+Requires `MR_USE_TICKLESS_IDLE=1`.
 
 ## 06 · SMP dual core (placeholder)
 
@@ -100,10 +100,10 @@ Two periodic tasks registered with the EDF scheduler:
 - Fast: 50 ms period, 40 ms deadline, 5 ms WCET
 - Slow: 200 ms period, 200 ms deadline, 20 ms WCET
 
-Demonstrates `rtos_deadline_task_create` and `rtos_deadline_job_complete`,
+Demonstrates `mr_deadline_task_create` and `mr_deadline_job_complete`,
 plus admission control.
 
-Requires `RTOS_USE_EDF_SCHEDULER=1`. Built automatically by
+Requires `MR_USE_EDF_SCHEDULER=1`. Built automatically by
 `make example8`.
 
 ## 09 · RTOS busy-wait blink
@@ -111,7 +111,7 @@ Requires `RTOS_USE_EDF_SCHEDULER=1`. Built automatically by
 **Path:** `examples/09_blink_busywait/main.c` · **Flash:** `~3.2 KB`
 
 One RTOS task that toggles the LED in a busy loop — no
-`rtos_task_delay`. Created during bring-up to isolate the scheduler
+`mr_task_delay`. Created during bring-up to isolate the scheduler
 from the delay/wake path. If 09 blinks but 10 doesn't, the bug is in
 the delay/wake mechanism.
 
@@ -120,7 +120,7 @@ the delay/wake mechanism.
 **Path:** `examples/10_blink_taskdelay/main.c` · **Flash:** `~3.5 KB`
 
 The minimum useful RTOS program — one task that yields via
-`rtos_task_delay`. The canonical "hello world" for the kernel and the
+`mr_task_delay`. The canonical "hello world" for the kernel and the
 example used by the Get Started walkthrough.
 
 See [First blink, explained](/docs/getting-started/first-blink) for a
@@ -143,9 +143,9 @@ The pattern:
 2. Add a target in the [Makefile](https://github.com/sitharaj88/rtos/blob/master/Makefile):
 
 ```make
-exampleN: $(RTOS_LIB)
+exampleN: $(MR_LIB)
     @$(CC) $(CFLAGS) examples/NN_your_name/main.c -o $(BUILD_DIR)/examples/exampleN.o
-    @$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/exampleN.o $(RTOS_LIB) \
+    @$(CC) $(LDFLAGS) $(BUILD_DIR)/examples/exampleN.o $(MR_LIB) \
         -o $(BUILD_DIR)/examples/exampleN.elf
     @$(SIZE) $(BUILD_DIR)/examples/exampleN.elf
 ```
