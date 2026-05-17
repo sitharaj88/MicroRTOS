@@ -4,9 +4,11 @@ import {
   BookOpen,
   ChevronRight,
   Cpu,
+  Feather,
   Gauge,
   Github,
   Layers,
+  Lightbulb,
   Lock,
   Rocket,
   ShieldCheck,
@@ -31,6 +33,10 @@ import { FootprintChart } from '@/components/marketing/footprint-chart';
 import { SyntaxCode, tok } from '@/components/marketing/syntax-code';
 import { CodeStack } from '@/components/marketing/code-stack';
 import { LogoStrip } from '@/components/marketing/logo-strip';
+import { TrustRow } from '@/components/marketing/trust-row';
+import { FloatingChip } from '@/components/marketing/floating-chip';
+import { ScrollHint } from '@/components/marketing/scroll-hint';
+import { LiveTicker } from '@/components/marketing/live-ticker';
 
 const faq = [
   {
@@ -66,27 +72,30 @@ export default function HomePage() {
       <section className="relative isolate overflow-hidden">
         <OrbBackground />
         <div className="bg-grid absolute inset-0 -z-10 opacity-60" aria-hidden />
+        {/* Soft top fade so the hero blends into the page nav */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-32 bg-gradient-to-b from-fd-background to-transparent"
+        />
 
-        <Container className="relative pb-16 pt-20 sm:pb-20 sm:pt-28 lg:pb-24 lg:pt-32">
+        <Container className="relative pb-20 pt-16 sm:pb-24 sm:pt-24 lg:pb-28 lg:pt-28">
           <div className="flex flex-col items-center text-center">
-            <Pill shimmer icon={Star}>
-              <span className="font-semibold text-fd-foreground">
-                Hardware-validated
-              </span>{' '}
-              · 79 host tests · MISRA-aligned · MIT
-            </Pill>
+            {/* Compact live status with pulsing dot */}
+            <LiveTicker text="Live on Arduino Uno · LED blinking at 1 Hz right now" />
 
-            <h1 className="mt-7 max-w-4xl text-balance text-5xl font-bold tracking-tightest text-fd-foreground sm:text-6xl lg:text-7xl">
+            <h1 className="mt-7 max-w-5xl text-balance text-5xl font-bold tracking-tightest text-fd-foreground sm:text-6xl lg:text-[5.25rem] lg:leading-[1.05]">
               The kernel{' '}
-              <span className="text-gradient-brand">small enough to read</span>,
-              real enough to ship.
+              <span className="text-gradient-flow whitespace-nowrap">
+                small enough to read
+              </span>
+              ,<br className="hidden sm:block" /> real enough to ship.
             </h1>
 
             <p className="mt-7 max-w-2xl text-balance text-lg text-fd-muted-foreground sm:text-xl">
-              MicroRTOS is a 3.5 KB real-time kernel for AVR and ARM Cortex-M
-              with priority and EDF scheduling, priority-inheritance mutexes,
-              queues, software timers, and a tickless mode — and you can audit
-              the whole thing in an afternoon.
+              MicroRTOS is a 3.5 KB real-time kernel for AVR and ARM
+              Cortex-M — priority &amp; EDF scheduling, priority-inheritance
+              mutexes, queues, timers, and tickless idle. The whole thing
+              audits in an afternoon.
             </p>
 
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
@@ -94,7 +103,12 @@ export default function HomePage() {
                 href="/docs/getting-started"
                 size="lg"
                 iconRight={<ArrowRight className="size-4" />}
+                className="relative isolate"
               >
+                <span
+                  aria-hidden
+                  className="absolute -inset-1 -z-10 rounded-xl bg-gradient-to-r from-fd-primary to-fd-accent opacity-50 blur-lg"
+                />
                 Get started
               </ButtonLink>
               <ButtonLink
@@ -114,127 +128,184 @@ export default function HomePage() {
                 GitHub
               </ButtonLink>
             </div>
+
+            {/* Trust signals row */}
+            <TrustRow className="mt-9" />
           </div>
 
-          {/* Hero visual — code + board side by side */}
-          <div className="mt-16 grid gap-6 lg:grid-cols-5 lg:items-center">
-            <div className="lg:col-span-3 lg:row-start-1">
-              <SyntaxCode
-                title="examples/10_blink_taskdelay/main.c"
-                language="c"
-                badge="LIVE on Uno"
-                className="lg:max-w-[640px]"
-              >
-                {[
-                  <span key="i1">
-                    <span className={tok.keyword}>#include</span>{' '}
-                    <span className={tok.string}>&quot;micrortos.h&quot;</span>
-                    {'\n'}
-                  </span>,
-                  '\n',
-                  <span key="t1">
-                    <span className={tok.keyword}>static</span>{' '}
-                    <span className={tok.type}>mr_tcb_t</span> task_tcb;{'\n'}
-                  </span>,
-                  <span key="t2">
-                    <span className={tok.keyword}>static</span>{' '}
-                    <span className={tok.type}>uint8_t</span>  task_stack[
-                    <span className={tok.number}>128</span>];{'\n'}
-                  </span>,
-                  '\n',
-                  <span key="f1">
-                    <span className={tok.keyword}>static void</span>{' '}
-                    <span className={tok.fn}>blinker</span>(
-                    <span className={tok.type}>void</span> *arg) {'{'}
-                    {'\n'}
-                  </span>,
-                  <span key="f2">
-                    {'    '}(<span className={tok.type}>void</span>)arg;{'\n'}
-                  </span>,
-                  <span key="f3">
-                    {'    '}
-                    <span className={tok.keyword}>while</span> (
-                    <span className={tok.number}>1</span>) {'{'}
-                    {'\n'}
-                  </span>,
-                  <span key="f4">
-                    {'        '}PORTB ^= (<span className={tok.number}>1</span>{' '}
-                    &lt;&lt; PB5);{'\n'}
-                  </span>,
-                  <span key="f5">
-                    {'        '}
-                    <span className={tok.fn}>mr_task_delay</span>(
-                    <span className={tok.fn}>MR_MS_TO_TICKS</span>(
-                    <span className={tok.number}>500</span>));{'\n'}
-                  </span>,
-                  <span key="f6">
-                    {'    }'}
-                    {'\n'}
-                  </span>,
-                  <span key="f7">{'}'}{'\n'}</span>,
-                  '\n',
-                  <span key="m1">
-                    <span className={tok.keyword}>int</span>{' '}
-                    <span className={tok.fn}>main</span>(
-                    <span className={tok.type}>void</span>) {'{'}
-                    {'\n'}
-                  </span>,
-                  <span key="m2">
-                    {'    '}DDRB |= (<span className={tok.number}>1</span>{' '}
-                    &lt;&lt; PB5);{'\n'}
-                  </span>,
-                  <span key="m3">
-                    {'    '}
-                    <span className={tok.fn}>mr_kernel_init</span>();{'\n'}
-                  </span>,
-                  <span key="m4">
-                    {'    '}
-                    <span className={tok.fn}>mr_task_create</span>(&amp;task_tcb,{' '}
-                    <span className={tok.string}>&quot;blink&quot;</span>,
-                    blinker, <span className={tok.keyword}>NULL</span>,{' '}
-                    <span className={tok.number}>2</span>,{'\n'}
-                  </span>,
-                  <span key="m5">
-                    {'                   '}task_stack,{' '}
-                    <span className={tok.keyword}>sizeof</span>(task_stack));
-                    {'\n'}
-                  </span>,
-                  <span key="m6">
-                    {'    '}
-                    <span className={tok.fn}>mr_kernel_start</span>();{' '}
-                    <span className={tok.comment}>/* never returns */</span>
-                    {'\n'}
-                  </span>,
-                  <span key="m7">{'}'}</span>,
-                ]}
-              </SyntaxCode>
-            </div>
+          {/* Hero visual — code + board side by side, integrated with chips */}
+          <div className="relative mt-20">
+            {/* Connector wire between code and board (lg only) */}
+            <svg
+              aria-hidden
+              className="pointer-events-none absolute inset-0 hidden h-full w-full text-fd-primary lg:block"
+              preserveAspectRatio="none"
+              viewBox="0 0 1200 600"
+            >
+              <defs>
+                <linearGradient id="wireGrad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="hsl(var(--color-fd-primary))" stopOpacity="0" />
+                  <stop offset="50%" stopColor="hsl(var(--color-fd-primary))" stopOpacity="0.7" />
+                  <stop offset="100%" stopColor="hsl(var(--color-fd-accent))" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path
+                d="M 640 360 C 720 360, 760 220, 880 220"
+                fill="none"
+                stroke="url(#wireGrad)"
+                strokeWidth="2"
+                className="wire-dashed"
+              />
+            </svg>
 
-            <div className="lg:col-span-2">
-              <BoardMock className="animate-float-slow" />
-              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-xl border border-fd-border bg-fd-card/60 px-3 py-2 backdrop-blur">
-                  <div className="font-mono text-base font-bold text-fd-foreground">
-                    3.5 KB
+            <div className="grid items-start gap-8 lg:grid-cols-5">
+              <div className="relative lg:col-span-3">
+                {/* Floating chip — top left, just above the code card */}
+                <FloatingChip
+                  icon={Feather}
+                  className="absolute -left-3 -top-5 z-20 hidden sm:inline-flex"
+                  variant="a"
+                >
+                  Zero <span className="font-mono">malloc</span>
+                </FloatingChip>
+                {/* Floating chip — bottom left */}
+                <FloatingChip
+                  icon={Lock}
+                  accent
+                  className="absolute -bottom-4 left-10 z-20 hidden sm:inline-flex"
+                  variant="c"
+                >
+                  Priority inheritance
+                </FloatingChip>
+
+                <SyntaxCode
+                  title="examples/10_blink_taskdelay/main.c"
+                  language="c"
+                  badge="LIVE on Uno"
+                >
+                  {[
+                    <span key="i1">
+                      <span className={tok.keyword}>#include</span>{' '}
+                      <span className={tok.string}>&quot;micrortos.h&quot;</span>
+                      {'\n'}
+                    </span>,
+                    '\n',
+                    <span key="t1">
+                      <span className={tok.keyword}>static</span>{' '}
+                      <span className={tok.type}>mr_tcb_t</span> task_tcb;{'\n'}
+                    </span>,
+                    <span key="t2">
+                      <span className={tok.keyword}>static</span>{' '}
+                      <span className={tok.type}>uint8_t</span>  task_stack[
+                      <span className={tok.number}>128</span>];{'\n'}
+                    </span>,
+                    '\n',
+                    <span key="f1">
+                      <span className={tok.keyword}>static void</span>{' '}
+                      <span className={tok.fn}>blinker</span>(
+                      <span className={tok.type}>void</span> *arg) {'{'}
+                      {'\n'}
+                    </span>,
+                    <span key="f2">
+                      {'    '}(<span className={tok.type}>void</span>)arg;{'\n'}
+                    </span>,
+                    <span key="f3">
+                      {'    '}
+                      <span className={tok.keyword}>while</span> (
+                      <span className={tok.number}>1</span>) {'{'}
+                      {'\n'}
+                    </span>,
+                    <span key="f4">
+                      {'        '}PORTB ^= (<span className={tok.number}>1</span>{' '}
+                      &lt;&lt; PB5);{'\n'}
+                    </span>,
+                    <span key="f5">
+                      {'        '}
+                      <span className={tok.fn}>mr_task_delay</span>(
+                      <span className={tok.fn}>MR_MS_TO_TICKS</span>(
+                      <span className={tok.number}>500</span>));{'\n'}
+                    </span>,
+                    <span key="f6">
+                      {'    }'}
+                      {'\n'}
+                    </span>,
+                    <span key="f7">{'}'}{'\n'}</span>,
+                    '\n',
+                    <span key="m1">
+                      <span className={tok.keyword}>int</span>{' '}
+                      <span className={tok.fn}>main</span>(
+                      <span className={tok.type}>void</span>) {'{'}
+                      {'\n'}
+                    </span>,
+                    <span key="m2">
+                      {'    '}DDRB |= (<span className={tok.number}>1</span>{' '}
+                      &lt;&lt; PB5);{'\n'}
+                    </span>,
+                    <span key="m3">
+                      {'    '}
+                      <span className={tok.fn}>mr_kernel_init</span>();{'\n'}
+                    </span>,
+                    <span key="m4">
+                      {'    '}
+                      <span className={tok.fn}>mr_task_create</span>(&amp;task_tcb,{' '}
+                      <span className={tok.string}>&quot;blink&quot;</span>,
+                      blinker, <span className={tok.keyword}>NULL</span>,{' '}
+                      <span className={tok.number}>2</span>,{'\n'}
+                    </span>,
+                    <span key="m5">
+                      {'                   '}task_stack,{' '}
+                      <span className={tok.keyword}>sizeof</span>(task_stack));
+                      {'\n'}
+                    </span>,
+                    <span key="m6">
+                      {'    '}
+                      <span className={tok.fn}>mr_kernel_start</span>();{' '}
+                      <span className={tok.comment}>/* never returns */</span>
+                      {'\n'}
+                    </span>,
+                    <span key="m7">{'}'}</span>,
+                  ]}
+                </SyntaxCode>
+              </div>
+
+              <div className="relative lg:col-span-2">
+                {/* Floating chip — top right */}
+                <FloatingChip
+                  icon={Lightbulb}
+                  accent
+                  className="absolute -right-2 -top-5 z-20 hidden sm:inline-flex"
+                  variant="b"
+                >
+                  Pin 13 blinking · 1 Hz
+                </FloatingChip>
+
+                <BoardMock className="animate-float-slow" />
+
+                {/* Live stat chips beneath board */}
+                <div className="mt-5 grid grid-cols-3 gap-3 text-center">
+                  <div className="group rounded-xl border border-fd-border bg-fd-card/60 px-3 py-2.5 backdrop-blur transition hover:border-fd-primary/30">
+                    <div className="font-mono text-base font-bold text-fd-foreground">
+                      3.5 KB
+                    </div>
+                    <div className="text-[10px] uppercase tracking-wider text-fd-muted-foreground">
+                      Flash
+                    </div>
                   </div>
-                  <div className="text-[10px] uppercase tracking-wider text-fd-muted-foreground">
-                    Flash
+                  <div className="group rounded-xl border border-fd-border bg-fd-card/60 px-3 py-2.5 backdrop-blur transition hover:border-fd-primary/30">
+                    <div className="font-mono text-base font-bold text-fd-foreground">
+                      518 B
+                    </div>
+                    <div className="text-[10px] uppercase tracking-wider text-fd-muted-foreground">
+                      SRAM
+                    </div>
                   </div>
-                </div>
-                <div className="rounded-xl border border-fd-border bg-fd-card/60 px-3 py-2 backdrop-blur">
-                  <div className="font-mono text-base font-bold text-fd-foreground">
-                    518 B
-                  </div>
-                  <div className="text-[10px] uppercase tracking-wider text-fd-muted-foreground">
-                    SRAM
-                  </div>
-                </div>
-                <div className="rounded-xl border border-fd-border bg-fd-card/60 px-3 py-2 backdrop-blur">
-                  <div className="font-mono text-base font-bold text-fd-foreground">
-                    1 ms
-                  </div>
-                  <div className="text-[10px] uppercase tracking-wider text-fd-muted-foreground">
-                    Tick
+                  <div className="group rounded-xl border border-fd-border bg-fd-card/60 px-3 py-2.5 backdrop-blur transition hover:border-fd-primary/30">
+                    <div className="font-mono text-base font-bold text-fd-foreground">
+                      1 ms
+                    </div>
+                    <div className="text-[10px] uppercase tracking-wider text-fd-muted-foreground">
+                      Tick
+                    </div>
                   </div>
                 </div>
               </div>
@@ -242,8 +313,13 @@ export default function HomePage() {
           </div>
 
           {/* Logo strip */}
-          <div className="mt-16">
+          <div className="mt-20">
             <LogoStrip />
+          </div>
+
+          {/* Scroll hint */}
+          <div className="mt-16 flex justify-center">
+            <ScrollHint />
           </div>
         </Container>
       </section>

@@ -122,6 +122,34 @@ const config: Config = {
           '0%': { transform: 'scaleX(0)', transformOrigin: 'left' },
           '100%': { transform: 'scaleX(1)', transformOrigin: 'left' },
         },
+        'gradient-flow': {
+          '0%, 100%': { backgroundPosition: '0% 50%' },
+          '50%': { backgroundPosition: '100% 50%' },
+        },
+        'scroll-hint': {
+          '0%, 100%': { transform: 'translateY(0)', opacity: '0.5' },
+          '50%': { transform: 'translateY(6px)', opacity: '1' },
+        },
+        'chip-float-a': {
+          '0%, 100%': { transform: 'translate(0, 0) rotate(-2deg)' },
+          '50%': { transform: 'translate(-4px, -8px) rotate(-2deg)' },
+        },
+        'chip-float-b': {
+          '0%, 100%': { transform: 'translate(0, 0) rotate(1deg)' },
+          '50%': { transform: 'translate(6px, -6px) rotate(1deg)' },
+        },
+        'chip-float-c': {
+          '0%, 100%': { transform: 'translate(0, 0) rotate(-1deg)' },
+          '50%': { transform: 'translate(-6px, 5px) rotate(-1deg)' },
+        },
+        'led-pulse': {
+          '0%, 100%': { opacity: '0.5', transform: 'scale(0.95)' },
+          '50%': { opacity: '1', transform: 'scale(1.05)' },
+        },
+        'wire-flow': {
+          '0%': { 'stroke-dashoffset': '100' },
+          '100%': { 'stroke-dashoffset': '0' },
+        },
       },
       animation: {
         shimmer: 'shimmer 2.5s linear infinite',
@@ -133,6 +161,13 @@ const config: Config = {
         'orb-2': 'orb-2 18s ease-in-out infinite',
         'pulse-soft': 'pulse-soft 4s ease-in-out infinite',
         'bar-grow': 'bar-grow 1s ease-out forwards',
+        'gradient-flow': 'gradient-flow 6s ease-in-out infinite',
+        'scroll-hint': 'scroll-hint 1.8s ease-in-out infinite',
+        'chip-float-a': 'chip-float-a 7s ease-in-out infinite',
+        'chip-float-b': 'chip-float-b 6s ease-in-out infinite',
+        'chip-float-c': 'chip-float-c 8s ease-in-out infinite',
+        'led-pulse': 'led-pulse 1.5s ease-in-out infinite',
+        'wire-flow': 'wire-flow 2.5s ease-in-out infinite',
       },
       backgroundImage: {
         'mesh-light': `

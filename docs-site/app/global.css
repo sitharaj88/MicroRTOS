@@ -94,4 +94,26 @@
     -webkit-background-clip: text;
     color: transparent;
   }
+
+  /* Slowly flowing gradient — used on the hero headline brand text. */
+  .text-gradient-flow {
+    background-image: linear-gradient(
+      120deg,
+      hsl(var(--color-fd-primary)) 0%,
+      hsl(var(--color-fd-accent)) 35%,
+      hsl(196 84% 56%) 65%,
+      hsl(var(--color-fd-primary)) 100%
+    );
+    background-size: 300% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    animation: gradient-flow 7s ease-in-out infinite;
+  }
+
+  /* Animated dashed wire used to connect hero code → board LED. */
+  .wire-dashed {
+    stroke-dasharray: 6 6;
+    animation: wire-flow 2.5s linear infinite;
+  }
 }
