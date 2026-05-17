@@ -22,7 +22,7 @@
 
   /* Inter and JetBrains Mono via CDN; declared here so SSR doesn't FOUT badly. */
   ::selection {
-    background-color: hsl(var(--color-fd-primary) / 0.25);
+    background-color: hsl(var(--fd-primary) / 0.25);
   }
 }
 
@@ -56,13 +56,13 @@
   /* Soft glow ring under spotlight elements */
   .glow-primary {
     box-shadow:
-      0 0 0 1px hsl(var(--color-fd-primary) / 0.15),
-      0 10px 40px -10px hsl(var(--color-fd-primary) / 0.45);
+      0 0 0 1px hsl(var(--fd-primary) / 0.15),
+      0 10px 40px -10px hsl(var(--fd-primary) / 0.45);
   }
   .glow-accent {
     box-shadow:
-      0 0 0 1px hsl(var(--color-fd-accent) / 0.15),
-      0 10px 40px -10px hsl(var(--color-fd-accent) / 0.45);
+      0 0 0 1px hsl(var(--fd-accent) / 0.15),
+      0 10px 40px -10px hsl(var(--fd-accent) / 0.45);
   }
 
   /* Shimmer used on the "Hardware-validated" badge */
@@ -75,9 +75,9 @@
   .text-gradient {
     background-image: linear-gradient(
       to bottom right,
-      hsl(var(--color-fd-foreground)),
-      hsl(var(--color-fd-foreground)),
-      hsl(var(--color-fd-muted-foreground))
+      hsl(var(--fd-foreground)),
+      hsl(var(--fd-foreground)),
+      hsl(var(--fd-muted-foreground))
     );
     background-clip: text;
     -webkit-background-clip: text;
@@ -87,8 +87,8 @@
   .text-gradient-brand {
     background-image: linear-gradient(
       to right,
-      hsl(var(--color-fd-primary)),
-      hsl(var(--color-fd-accent))
+      hsl(var(--fd-primary)),
+      hsl(var(--fd-accent))
     );
     background-clip: text;
     -webkit-background-clip: text;
@@ -99,10 +99,10 @@
   .text-gradient-flow {
     background-image: linear-gradient(
       120deg,
-      hsl(var(--color-fd-primary)) 0%,
-      hsl(var(--color-fd-accent)) 35%,
+      hsl(var(--fd-primary)) 0%,
+      hsl(var(--fd-accent)) 35%,
       hsl(196 84% 56%) 65%,
-      hsl(var(--color-fd-primary)) 100%
+      hsl(var(--fd-primary)) 100%
     );
     background-size: 300% 100%;
     background-clip: text;

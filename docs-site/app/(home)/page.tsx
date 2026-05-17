@@ -163,9 +163,9 @@ export default function HomePage() {
             >
               <defs>
                 <linearGradient id="wireGrad" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="hsl(var(--color-fd-primary))" stopOpacity="0" />
-                  <stop offset="50%" stopColor="hsl(var(--color-fd-primary))" stopOpacity="0.7" />
-                  <stop offset="100%" stopColor="hsl(var(--color-fd-accent))" stopOpacity="0" />
+                  <stop offset="0%" stopColor="hsl(var(--fd-primary))" stopOpacity="0" />
+                  <stop offset="50%" stopColor="hsl(var(--fd-primary))" stopOpacity="0.7" />
+                  <stop offset="100%" stopColor="hsl(var(--fd-accent))" stopOpacity="0" />
                 </linearGradient>
               </defs>
               <path

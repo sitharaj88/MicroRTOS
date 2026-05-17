@@ -61,11 +61,29 @@ export const viewport: Viewport = {
   ],
 };
 
+// Static search: the index lives at `${basePath}/api/search` because we
+// build with output: 'export' and a project basePath on GitHub Pages.
+// The client fetches a plain relative URL, so we must include basePath.
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="flex min-h-screen flex-col">
-        <RootProvider>{children}</RootProvider>
+        <RootProvider
+          search={{
+            options: {
+              type: 'static',
+              // Next.js export writes the static search index as a single
+              // file at out/api/search (no trailing slash, no directory) —
+              // that's the URL GitHub Pages serves. We must include the
+              // GitHub Pages basePath here since fetch won't auto-prefix.
+              api: `${basePath}/api/search`,
+            },
+          }}
+        >
+          {children}
+        </RootProvider>
       </body>
     </html>
   );
