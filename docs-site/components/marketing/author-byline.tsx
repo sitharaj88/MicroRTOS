@@ -41,8 +41,28 @@ export function AuthorByline({
   variant = 'compact',
 }: {
   className?: string;
-  variant?: 'compact' | 'full';
+  variant?: 'compact' | 'full' | 'icons';
 }) {
+  if (variant === 'icons') {
+    // Bare icon row — used in the footer brand cluster.
+    return (
+      <ul className={cn('flex items-center gap-1.5', className)}>
+        {socials.map((s) => (
+          <li key={s.label}>
+            <Link
+              href={s.href}
+              target="_blank"
+              rel="noreferrer noopener"
+              aria-label={s.label}
+              className="inline-flex size-9 items-center justify-center rounded-lg border border-fd-border bg-fd-card text-fd-muted-foreground transition hover:-translate-y-0.5 hover:border-fd-primary/40 hover:text-fd-primary"
+            >
+              <s.icon className="size-4" strokeWidth={2.2} />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    );
+  }
   if (variant === 'compact') {
     return (
       <div

@@ -67,6 +67,39 @@ const faq = [
   },
 ];
 
+type FooterItem = readonly [label: string, href: string, external?: boolean];
+
+function FooterColumn({
+  title,
+  items,
+}: {
+  title: string;
+  items: readonly FooterItem[];
+}) {
+  return (
+    <div>
+      <div className="mb-3 text-xs font-bold uppercase tracking-widest text-fd-muted-foreground">
+        {title}
+      </div>
+      <ul className="space-y-2.5">
+        {items.map(([label, href, external]) => (
+          <li key={href}>
+            <Link
+              href={href}
+              className="text-fd-foreground transition-colors hover:text-fd-primary"
+              {...(external
+                ? { target: '_blank', rel: 'noreferrer noopener' }
+                : {})}
+            >
+              {label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function HomePage() {
   return (
     <main className="flex flex-1 flex-col">
@@ -651,124 +684,91 @@ export default function HomePage() {
 
       {/* =========================== FOOTER ============================ */}
       <footer className="border-t border-fd-border bg-fd-card/40">
-        <Container className="py-16">
-          <div className="grid gap-12 lg:grid-cols-12 lg:gap-10">
-            {/* Brand + about + author cluster */}
-            <div className="lg:col-span-5">
-              <div className="flex items-center gap-2.5">
+        <Container className="py-12 sm:py-16">
+          {/* Top row: brand cluster + three link columns.
+              Mobile  → brand on top, then a 2-col link grid.
+              sm      → brand + 3-col link grid stacked.
+              lg      → 12-col split (brand 4, links 8 = 3×).
+              Equal-weight link columns keep the eye moving horizontally. */}
+          <div className="grid gap-10 sm:gap-12 lg:grid-cols-12 lg:gap-10">
+            <div className="lg:col-span-4">
+              <Link href="/" className="inline-flex items-center gap-2.5">
                 <LogoMark size={32} />
-                <span className="text-xl font-bold tracking-tight">MicroRTOS</span>
-              </div>
-              <p className="mt-4 max-w-sm text-sm text-fd-muted-foreground">
+                <span className="text-xl font-bold tracking-tight text-fd-foreground">
+                  MicroRTOS
+                </span>
+              </Link>
+              <p className="mt-4 max-w-sm text-sm leading-relaxed text-fd-muted-foreground">
                 A small, MISRA-aligned real-time kernel for AVR and ARM
                 Cortex-M. Built to be read, audited, and shipped.
               </p>
-
-              {/* Author block */}
-              <div className="mt-7 rounded-2xl border border-fd-border bg-fd-card p-5">
-                <div className="flex items-center gap-3">
-                  <div
-                    aria-hidden
-                    className="inline-flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-fd-primary to-fd-accent text-sm font-bold text-white shadow-lg shadow-fd-primary/20"
-                  >
-                    SS
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-fd-foreground">
-                      {author.name}
-                    </div>
-                    <div className="text-xs text-fd-muted-foreground">
-                      Author &amp; maintainer
-                    </div>
-                  </div>
-                </div>
-                <AuthorByline variant="full" className="mt-4" />
-              </div>
-
-              <p className="mt-6 text-xs text-fd-muted-foreground">
+              <p className="mt-4 text-xs text-fd-muted-foreground">
+                Crafted by{' '}
                 <Link
-                  href="https://github.com/sitharaj88/MicroRTOS/blob/main/LICENSE"
+                  href={author.site}
+                  target="_blank"
+                  rel="noreferrer noopener"
                   className="font-semibold text-fd-foreground hover:text-fd-primary"
                 >
-                  MIT License
-                </Link>{' '}
-                · © {new Date().getFullYear()} {author.name}
+                  {author.name}
+                </Link>
               </p>
+              <AuthorByline variant="icons" className="mt-5" />
             </div>
 
-            {/* Doc + resource + project columns */}
-            <div className="grid grid-cols-2 gap-8 text-sm sm:grid-cols-3 lg:col-span-7">
-              <div>
-                <div className="mb-3 text-xs font-bold uppercase tracking-widest text-fd-muted-foreground">
-                  Docs
-                </div>
-                <ul className="space-y-2">
-                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/getting-started">Get started</Link></li>
-                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/tutorials">Tutorials</Link></li>
-                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/concepts">Concepts</Link></li>
-                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/api">API reference</Link></li>
-                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/performance">Performance</Link></li>
-                </ul>
-              </div>
-              <div>
-                <div className="mb-3 text-xs font-bold uppercase tracking-widest text-fd-muted-foreground">
-                  Resources
-                </div>
-                <ul className="space-y-2">
-                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/examples">Examples</Link></li>
-                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/porting">Porting</Link></li>
-                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/faq">FAQ</Link></li>
-                  <li><Link className="text-fd-foreground hover:text-fd-primary" href="/docs/comparison">Comparison</Link></li>
-                </ul>
-              </div>
-              <div>
-                <div className="mb-3 text-xs font-bold uppercase tracking-widest text-fd-muted-foreground">
-                  Project
-                </div>
-                <ul className="space-y-2">
-                  <li>
-                    <Link
-                      className="text-fd-foreground hover:text-fd-primary"
-                      href="https://github.com/sitharaj88/MicroRTOS"
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      GitHub repo
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      className="text-fd-foreground hover:text-fd-primary"
-                      href="https://github.com/sitharaj88/MicroRTOS/issues"
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      Issues
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      className="text-fd-foreground hover:text-fd-primary"
-                      href="https://github.com/sitharaj88/MicroRTOS/blob/main/docs/MISRA_COMPLIANCE.md"
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      MISRA report
-                    </Link>
-                  </li>
-                  <li>
-                    <Link
-                      className="text-fd-foreground hover:text-fd-primary"
-                      href="https://github.com/sitharaj88/MicroRTOS/blob/main/LICENSE"
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      MIT License
-                    </Link>
-                  </li>
-                </ul>
-              </div>
-            </div>
+            <nav
+              aria-label="Footer"
+              className="grid grid-cols-2 gap-8 text-sm sm:grid-cols-3 sm:gap-10 lg:col-span-8"
+            >
+              <FooterColumn
+                title="Docs"
+                items={[
+                  ['Get started', '/docs/getting-started'],
+                  ['Tutorials', '/docs/tutorials'],
+                  ['Concepts', '/docs/concepts'],
+                  ['API reference', '/docs/api'],
+                  ['Performance', '/docs/performance'],
+                ]}
+              />
+              <FooterColumn
+                title="Resources"
+                items={[
+                  ['Examples', '/docs/examples'],
+                  ['Porting', '/docs/porting'],
+                  ['FAQ', '/docs/faq'],
+                  ['Comparison', '/docs/comparison'],
+                ]}
+              />
+              <FooterColumn
+                title="Project"
+                items={[
+                  ['GitHub repo', 'https://github.com/sitharaj88/MicroRTOS', true],
+                  ['Issues', 'https://github.com/sitharaj88/MicroRTOS/issues', true],
+                  ['MISRA report', 'https://github.com/sitharaj88/MicroRTOS/blob/main/docs/MISRA_COMPLIANCE.md', true],
+                  ['MIT License', 'https://github.com/sitharaj88/MicroRTOS/blob/main/LICENSE', true],
+                ]}
+              />
+            </nav>
+          </div>
+
+          {/* Bottom bar — separator, copyright, tagline.
+              Stacks on mobile, sits side-by-side from sm up. */}
+          <div className="mt-12 flex flex-col-reverse gap-3 border-t border-fd-border pt-6 text-xs text-fd-muted-foreground sm:mt-14 sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              <Link
+                href="https://github.com/sitharaj88/MicroRTOS/blob/main/LICENSE"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="font-semibold text-fd-foreground hover:text-fd-primary"
+              >
+                MIT License
+              </Link>
+              {' · '}© {new Date().getFullYear()} {author.name}
+            </p>
+            <p className="inline-flex items-center gap-1.5">
+              <span aria-hidden className="inline-block size-1.5 rounded-full bg-emerald-500" />
+              Hardware-validated on Arduino Uno
+            </p>
           </div>
         </Container>
       </footer>
